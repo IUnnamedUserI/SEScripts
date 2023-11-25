@@ -1,10 +1,10 @@
 //Ка-52 - Основные системы
 /*ToDo:
-1. Адаптивная индикация повреждений
-2. Адаптивная глобальная система
-3. !!! ДОДЕЛАТЬ РАБОТУ С ГЛОБАЛЬНЫМИ ДАННЫМИ !!!
-4. Сопровождение цели камерой
-5. Наведение вооружения
+1. Адаптивная индикация повреждений (-)
+2. Адаптивная глобальная система (-)
+3. !!! ДОДЕЛАТЬ РАБОТУ С ГЛОБАЛЬНЫМИ ДАННЫМИ !!! (-)
+4. Сопровождение цели камерой (-)
+5. Наведение вооружения (-)
 */
 
 IMyTextSurface Surface1;
@@ -16,6 +16,8 @@ IMyPowerProducer LeftEngine, RightEngine;
 IMyThrust PropellerUp, PropellerLow;
 IMyGyro Gyroscope;
 IMyMotorStator ChainElevation, ChainAzimuth, CameraElevation, CameraAzimuth;
+IMyMotorStator LeftDoor, RightDoor;
+IMyTextPanel FighterLCD;
 
 IMySmallMissileLauncher MissileLauncher1, MissileLauncher2;
 IMySmallMissileLauncher Bomb1, Bomb2;
@@ -65,6 +67,10 @@ public Program()
     Missile2 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("AIM-54 Mount 2");
     ChainGun = (IMySmallGatlingGun)GridTerminalSystem.GetBlockWithName("30mm Chain Gun");
 
+    LeftDoor = (IMyMotorStator)GridTerminalSystem.GetBlockWithName("Left Door Hinge");
+    RightDoor = (IMyMotorStator)GridTerminalSystem.GetBlockWithName("Right Door Hinge");
+    FighterLCD = (IMyTextPanel)GridTerminalSystem.GetBlockWithName("Fighter HUD LCD");
+
     GridTerminalSystem.GetBlocksOfType<IMyCockpit>(CockpitList);
     GridTerminalSystem.GetBlocksOfType<IMyGasTank>(GasTankList);
     GridTerminalSystem.GetBlocksOfType<IMyMotorStator>(WheelHingeList, (w) => w.DisplayNameText.Contains("Wheel Rotor"));
@@ -96,9 +102,16 @@ void Main(string argument)
     if (argument == "SwitchInstructor") { Instructor = !Instructor; } // Переключение инструктора
     else if (argument == "SwitchHorizon") { Horizon = !Horizon; } // Переключение удержания горизонта
     else if (argument == "SwitchSpeedDumpeners") { SpeedDumpeners = !SpeedDumpeners; } // Переключение гасителя скорости
+    
+    if (!PilotCockpit.IsUnderControl)
+    {
+        if (argument == "OpenLeftDoor") { LeftDoor.TargetVelocityRPM = 5f; }
+        else if (argument == "CloseLeftDoor") LeftDoor.TargetVelocityRPM = -5f;
+    } else LeftDoor.TargetVelocityRPM = -5f;
 
     DrawInfo();
     GetSystemData();
+    DrawHUD();
 
     try
     {
@@ -130,6 +143,11 @@ void Main(string argument)
         CameraAzimuth.TargetVelocityRPM = -CoPilotCockpit.RotationIndicator.Y * CAMERA_SENSIVITY;
     }
     catch { Echo("Main() - Error"); }
+}
+
+void CameraLock(Vector3D TargetPosition) // Сделать слежение камерой
+{
+    Vector3D MyPosition = Camera.GetPosition();
 }
 
 void DrawInfo()
@@ -292,6 +310,17 @@ void SetHorizon() // Расчёт и установка грида относи�
     Gyroscope.Pitch = PitchInput;
 }
 
+float GetHorizon()
+{
+    Vector3D GravityVector = PilotCockpit.GetNaturalGravity();
+    Vector3D GravityNormalize = Vector3D.Normalize(GravityVector);
+
+    double GravityLeft = GravityNormalize.Dot(PilotCockpit.WorldMatrix.Left);
+    double GravityUp = GravityNormalize.Dot(PilotCockpit.WorldMatrix.Up);
+
+    return (float)Math.Atan2(GravityLeft, -GravityUp);
+}
+
 void Dumpeners() // Расчёт и наклон грида для погашения боковой скорости
 {
     Vector3D SpeedVector = PilotCockpit.GetShipVelocities().LinearVelocity;
@@ -359,6 +388,12 @@ MySprite DrawLine(Vector2 Point1, Vector2 Point2, float Width, Color Color) // �
     return new MySprite(SpriteType.TEXTURE, "SquareSimple", CenterVector, new Vector2((Point1 - Point2).Length(), Width), Color, "", TextAlignment.CENTER, (float)Math.Atan((Point2.Y - Point1.Y) / (Point2.X - Point1.X)));
 }
 
+MySprite DrawLine(Vector2 Point1, Vector2 Point2, float Width, Color Color, float Rotate) // Отрисовка линии
+{
+    Vector2 CenterVector = (Point1 + Point2) / 2;
+    return new MySprite(SpriteType.TEXTURE, "SquareSimple", CenterVector, new Vector2((Point1 - Point2).Length(), Width), Color, "", TextAlignment.CENTER, Rotate);
+}
+
 Color GetBlockEnabled(IMyTerminalBlock Block) // Получение цвета блока в индикации (по ссылке на блок)
 {
     if (Block.IsWorking && Block != null) return Color.Green;
@@ -401,4 +436,18 @@ bool ReturnOnOff(string Param)
 {
     if (Param == "Вкл.") return true;
     else return false;
+}
+
+// MySprite(SpriteType.TEXTURE, "SquareSimple", CenterVector, new Vector2((Point1 - Point2).Length(), Width), Color, "", TextAlignment.CENTER, Rotate);
+
+void DrawHUD()
+{
+    FighterLCD.ContentType = ContentType.NONE; FighterLCD.ContentType = ContentType.SCRIPT;
+    FighterLCD.ScriptBackgroundColor = Color.Black;
+    using (MySpriteDrawFrame Frame = FighterLCD.DrawFrame())
+    {
+        Frame.Add(DrawLine(new Vector2(50f, 256f), new Vector2(462f, 256f), 2f, Color.Green, GetHorizon()));
+        MySprite BlackRectangle = new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(256f, 256f), new Vector2(40f, 10f), Color.Black, "", TextAlignment.CENTER, 0f);
+        Frame.Add(BlackRectangle);
+    }
 }
