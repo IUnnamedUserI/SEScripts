@@ -1,0 +1,181 @@
+//Попытка ракеты
+IMyCameraBlock Camera;
+IMyThrust Thruster;
+IMyGyro Gyroscope1, Gyroscope2;
+IMyWarhead Warhead;
+IMyRemoteControl RC;
+Missile Rocket;
+Coordinates Coord;
+
+int Counter = 0;
+int Countdown = 2;
+
+public Program()
+{
+    Runtime.UpdateFrequency = UpdateFrequency.Update1;
+    if (Init()) CreateMissile();
+}
+
+void Main(string argument)
+{
+    if (Me.CustomData != string.Empty)
+    {
+        Coord = new Coordinates(Me.CustomData);
+    }
+    else Rocket.SetDefaultParams();
+
+    if (argument == "Launch") Rocket.Launch();
+
+    if (Rocket.IsLaunched)
+    {
+        if (Countdown > 0)
+        {
+            Counter++;
+            if (Counter % 60 == 0) { Countdown--; Counter = 0; }
+        }
+        else if (Countdown == 0)
+        {
+            Thruster.ThrustOverridePercentage = 20f;
+            Rocket.CorrectMissile(Coord.CoordDecript());
+        }
+    }
+}
+
+bool Init()
+{
+    try
+    {
+        Camera = (IMyCameraBlock)GridTerminalSystem.GetBlockWithName("Missile Camera");
+        Thruster = (IMyThrust)GridTerminalSystem.GetBlockWithName("Missile Hydrogen Thruster");
+        Gyroscope1 = (IMyGyro)GridTerminalSystem.GetBlockWithName("Missile Gyro Override");
+        Gyroscope2 = (IMyGyro)GridTerminalSystem.GetBlockWithName("Missile Gyro");
+        Warhead = (IMyWarhead)GridTerminalSystem.GetBlockWithName("Missile Warhead HE");
+        RC = (IMyRemoteControl)GridTerminalSystem.GetBlockWithName("Missile Remote Control");
+        Echo("Init: Success");
+        return true;
+    }
+    catch { Echo("Init: Error"); return false; }
+}
+
+void CreateMissile() { Rocket = new Missile(Camera, Thruster, Gyroscope1, Gyroscope2, Warhead, RC); }
+
+class Missile
+{
+    private IMyCameraBlock Camera;
+    private IMyThrust Thruster;
+    private IMyGyro Gyro1, Gyro2;
+    private IMyWarhead Warhead;
+    private IMyRemoteControl RemoteControl;
+
+    public bool IsLaunched;
+    private float GyroMultiply;
+    Vector3D DirectionToTarget;
+
+    public Missile(IMyCameraBlock Camera, IMyThrust Thruster, IMyGyro Gyroscope1, IMyGyro Gyroscope2, IMyWarhead Warhead, IMyRemoteControl RemoteControl)
+    {
+        this.Camera = Camera;
+        Camera.EnableRaycast = true;
+        this.Thruster = Thruster;
+        this.Gyro1 = Gyroscope1;
+        this.Gyro2 = Gyroscope2;
+        this.Warhead = Warhead;
+        this.RemoteControl = RemoteControl;
+        IsLaunched = false;
+        GyroMultiply = 1f;
+
+        SetDefaultParams();
+    }
+
+    public void SetDefaultParams()
+    {
+        Gyro1.Yaw = 0f;
+        Gyro1.Pitch = 0f;
+        Gyro1.Roll = 0f;
+        Gyro1.Enabled = false;
+        Gyro2.Yaw = 0f;
+        Gyro2.Pitch = 0f;
+        Gyro2.Roll = 0f;
+        Gyro2.Enabled = false;
+        Thruster.ThrustOverride = 0f;
+        Warhead.IsArmed = true;
+    }
+
+    private MyDetectedEntityInfo TargetLock()
+    {
+        MyDetectedEntityInfo Entity = Camera.Raycast(5000, 0, 0);
+        return Entity;
+    }
+
+    public double GetTargetDistance(MyDetectedEntityInfo Entity)
+    {
+        return Math.Sqrt(Math.Pow(DirectionToTarget.X, 2) + Math.Pow(DirectionToTarget.Y, 2) + Math.Pow(DirectionToTarget.Z, 2));
+    }
+
+    public double GetTargetDistance(Coordinates Coords)
+    {
+        return Math.Sqrt(Math.Pow(DirectionToTarget.X, 2) + Math.Pow(DirectionToTarget.Y, 2) + Math.Pow(DirectionToTarget.Z, 2));
+    }
+
+    public void CorrectMissile(Vector3D EntityPosition)
+    {
+        DirectionToTarget = EntityPosition - Warhead.GetPosition();
+        CorrectPitch();
+        CorrectYaw();
+        //CorrectRoll();
+    }
+
+    private void CorrectPitch() //Высота
+    {
+        Gyro1.Pitch = -GetAngleBetweenVectors(Warhead.WorldMatrix.Forward, Warhead.WorldMatrix.Right, DirectionToTarget);
+        Gyro2.Pitch = Gyro1.Pitch;
+        Gyro1.CustomData = (-GetAngleBetweenVectors(Warhead.WorldMatrix.Forward, Warhead.WorldMatrix.Right, DirectionToTarget)).ToString();
+    }
+
+    private void CorrectYaw() //Азимут
+    {
+        Gyro1.Yaw = -GetAngleBetweenVectors(Warhead.WorldMatrix.Forward, Warhead.WorldMatrix.Up, DirectionToTarget);
+        Gyro2.Yaw = Gyro1.Yaw;
+        Gyro1.CustomData += "\n" + (-GetAngleBetweenVectors(Warhead.WorldMatrix.Forward, Warhead.WorldMatrix.Up, DirectionToTarget)).ToString();
+    }
+
+    private void CorrectRoll() //Крен
+    {
+        Vector3D GravityVector = RemoteControl.GetNaturalGravity();
+        Vector3D GravityNormalize = Vector3D.Normalize(GravityVector);
+
+        double GravityLeft = GravityNormalize.Dot(RemoteControl.WorldMatrix.Left);
+        double GravityUp = GravityNormalize.Dot(RemoteControl.WorldMatrix.Up);
+
+        Gyro1.Roll = (float)Math.Atan2(GravityLeft, -GravityUp);
+        Gyro2.Roll = Gyro1.Roll;
+    }
+
+    private float GetAngleBetweenVectors(Vector3D VectorForward, Vector3D VectorRight, Vector3D EntityVector)
+    {
+        double Cos = EntityVector.Dot(VectorForward);
+        double Sin = EntityVector.Dot(VectorRight);
+        return (float)(Math.Atan2(Sin, Cos) / Math.PI * 180);
+    }
+
+    public void Launch() { Thruster.ThrustOverridePercentage = 100f; Thruster.Enabled = true; Gyro1.Enabled = true; Gyro2.Enabled = true; IsLaunched = true; }
+}
+
+class Coordinates
+{
+    string CoordString;
+
+    public Coordinates(string CoordString)
+    {
+        this.CoordString = CoordString;
+    }
+
+    public Vector3D CoordDecript()
+    {
+        Vector3D Coord = new Vector3D();
+        string[] StringArray = CoordString.Split(':');
+        Coord.X = double.Parse(StringArray[0]);
+        Coord.Y = double.Parse(StringArray[1]);
+        Coord.Z = double.Parse(StringArray[2]);
+        return Coord;
+    }
+}
