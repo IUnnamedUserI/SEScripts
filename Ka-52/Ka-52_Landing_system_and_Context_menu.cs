@@ -11,12 +11,13 @@ IMyRadioAntenna Antenna;
 Vector2 CenterScreen;
 LandingArea CurrentLandingArea;
 int Counter = 0;
-ContextMenu PrevMenu, CurrentMenu, Control, InstructorMenu, GPSMenu;
+ContextMenu PrevMenu, CurrentMenu, Control, InstructorMenu, GPSMenu, GPSListMenu;
 bool IsLandingChassis = true;
 bool IsStels = false;
 
 List<IMyCockpit> CockpitList = new List<IMyCockpit>();
 List<LandingArea> LandingAreaList = new List<LandingArea>();
+List<LandingArea> GPSList = new List<LandingArea>();
 List<ContextMenu> ContextMenuList = new List<ContextMenu>();
 
 public Program()
@@ -41,6 +42,9 @@ public Program()
 
 void Init()
 {
+    /*
+    Инициализация дополнительных модулей
+    */
     for (int i = 0; Cockpit == null; i++) { if (CockpitList[i].IsFunctional) Cockpit = CockpitList[i]; } // Инициализация кокпита
     LandingAreaList = GetLandingPoints(Cockpit); // Получение статичных точек приземления из кокпита
     Stels(true); // Отключение стелс-режима
@@ -65,6 +69,10 @@ void Main(string argument)
 
 void DrawLandingSystem()
 {
+    /*
+    Отрисовка посадочной системы
+    */
+
     LandingSurface.ContentType = ContentType.NONE; LandingSurface.ContentType = ContentType.SCRIPT;
     using (MySpriteDrawFrame Frame = LandingSurface.DrawFrame())
     {
@@ -132,6 +140,9 @@ void DrawLandingSystem()
 
 string GetAntennaData(string Data)
 {
+    /*
+    Получение данных с антенны - имя и частота
+    */
     string[] AntennaData = Antenna.CustomData.Split('\n');
     switch (Data)
     {
@@ -230,7 +241,13 @@ void ButtonClick(Button Object_Button)
             ChangeParam("SpeedDumpeners");
             break;
 
-        case "AimAssist": ChangeParam("Помощь прицеливания"); break;
+        case "AimAssist":
+            ChangeParam("Помощь прицеливания");
+            break;
+
+        case "CreateNewLandingArea":
+            GPSList.Add(new LandingArea("Новая точка", Cockpit.GetPosition()));
+            break;
     }
     for (int i = 1; i < CurrentMenu.ButtonList.Count; i++) try { CurrentMenu.ChangeButtonColor(CurrentMenu.ButtonList[i].Tag, GetParam(CurrentMenu.ButtonList[i].Tag)); } catch {}
 }
@@ -281,6 +298,16 @@ void CreateGPSScreen()
     GPSMenu.CreateButton("Список точек", "StaticLandingAreaList");
     GPSMenu.CreateButton("Добавить точку", "CreateNewLandingArea");
 }
+
+void CreateGPSListScreen()
+{
+    GPSListMenu = new ContextMenu("Список точек");
+    GPSListMenu.CreateButton("< Назад", "Back");
+    foreach (LandingArea GPSPoint in GPSList)
+        GPSListMenu.CreateGPSButton(GPSPoint.AreaName, GPSPoint.LandingVector);
+}
+
+//CurrentLandingArea
 
 void Stels(bool StelsEnabled)
 {
@@ -397,6 +424,13 @@ class ContextMenu
     public void CreateButton(string Name, string Tag, Color ButtonColor)
     {
         Button Btn = new Button(Name, new Vector2(65f, 100 + 40 * ButtonList.Count), Tag, ButtonColor);
+        ButtonList.Add(Btn);
+        SelectButtonID(SelectedButtonID);
+    }
+
+    public void CreateGPSButton(string Name, Vector3D Coords)
+    {
+        Button Btn = new Button(Name, new Vector2(65f, 100 + 40 * ButtonList.Count), Coords.ToString(), Color.Green);
         ButtonList.Add(Btn);
         SelectButtonID(SelectedButtonID);
     }
