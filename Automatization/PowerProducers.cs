@@ -4,6 +4,8 @@ List<IMyPowerProducer> PowerList = new List<IMyPowerProducer>();
 List<EnergyValue> currentPowerOutputList = new List<EnergyValue>();
 
 int POWER_INIT_COUNTER = 0;
+int UPDATE_COUNTER = 0;
+const int MAX_UPDATE_COUNTER = 100;
 
 public Program()
 {
@@ -24,6 +26,7 @@ void Init()
 public void Main(string argument)
 {
     POWER_INIT_COUNTER++;
+    UPDATE_COUNTER++;
     if (POWER_INIT_COUNTER == 100)
     {
         Init();
@@ -35,12 +38,21 @@ public void Main(string argument)
 
     EnergyValue maxOutput = new EnergyValue();
     foreach (IMyPowerProducer powerProducer in PowerList) maxOutput.Value += powerProducer.MaxOutput;
+    if (currentPowerOutputList.Count > 0)
+        foreach (EnergyValue energyValue in currentPowerOutputList)
+            if (ConvertValue(ConvertValue(energyValue), "kW").Value > ConvertValue(ConvertValue(maxOutput), "kW").Value) maxOutput = ConvertValue(energyValue);
     maxOutput = ConvertValue(maxOutput);
 
     EnergyValue currentOutput = new EnergyValue();
     foreach (IMyPowerProducer powerProducer in PowerList) currentOutput.Value += powerProducer.CurrentOutput;
     currentOutput = ConvertValue(currentOutput);
-    currentPowerOutputList = AddValue(currentPowerOutputList, currentOutput);
+
+    if (UPDATE_COUNTER == MAX_UPDATE_COUNTER)
+    {
+        currentPowerOutputList = AddValue(currentPowerOutputList, currentOutput);
+        if (currentPowerOutputList.Count > 22) currentPowerOutputList.RemoveAt(22);
+        UPDATE_COUNTER = 0;
+    }
 
     Vector2 MonitorSize = Monitor.TextureSize;
 
@@ -54,6 +66,12 @@ public void Main(string argument)
             Frame.Add(MaxOutput);
             value += Math.Round(maxOutput.Value / 10, 1);
         }
+
+        MySprite Square = new MySprite(SpriteType.TEXTURE, "SquareHollow", new Vector2(50f, 441.75f), new Vector2(20f, 20f), Color.DarkGreen, "", TextAlignment.CENTER, 0f);
+        Frame.Add(Square);
+
+        MySprite MaxMagnitudeSprite = new MySprite(SpriteType.TEXT, maxOutput.Magnitude, new Vector2(20f, 5f), null, Color.Green, "Debug", TextAlignment.LEFT, 0.4f);
+        Frame.Add(MaxMagnitudeSprite);
         
         MySprite VerticalLine = new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(40f, 230f), new Vector2(1f, 445f), Color.Green, "", TextAlignment.CENTER, 0f);
         Frame.Add(VerticalLine);
@@ -68,28 +86,34 @@ public void Main(string argument)
             Frame.Add(CurrentOutput);
         }
 
-        for (int i = 0; i < 20; i++)
+        int plankCount = 0;
+        foreach (EnergyValue energyValue in currentPowerOutputList)
         {
             try
             {
-                float width = 45f + i * 22f;
-                float height = (float)(512 - 445 * Decemial(currentPowerOutputList[i], maxOutput));
-                MySprite Mark = new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(width, height), new Vector2(10f, 4f), Color.Yellow, "", TextAlignment.CENTER, 0f);
+                float width = 45f + plankCount * 22f;
+                float height = (float)(450 - 435 * (Decemial(ConvertValue(new EnergyValue(energyValue.Value * 100, energyValue.Magnitude)), maxOutput)) / 100);
+                MySprite Mark = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(width, height), new Vector2(1f, 1f), Color.Yellow, "", TextAlignment.CENTER, 0f);
                 Frame.Add(Mark);
+                if (plankCount > 0)
+                {
+                    int heightPrev = (int)Math.Round(450 - 435 * (Decemial(ConvertValue(new EnergyValue(currentPowerOutputList[plankCount - 1].Value * 100, currentPowerOutputList[plankCount - 1].Magnitude)), maxOutput)) / 100);
+                    MySprite Line = DrawLine(new Vector2((int)Math.Round(width), (int)Math.Round(height)), new Vector2(45 + (plankCount - 1) * 22, heightPrev), 1f, Color.Yellow);
+                    Frame.Add(Line);
+                }
+                plankCount++;
             }
             catch {}
         }
 
-        MySprite DebugSprite = new MySprite(SpriteType.TEXT, $"{Math.Round(currentOutput.Value).ToString()} {currentOutput.Magnitude}", new Vector2(100f, 100f), null, Color.Red, "Debug", TextAlignment.CENTER, 0.5f);
-        Frame.Add(DebugSprite);
+        //MySprite DebugSprite = new MySprite(SpriteType.TEXT, currentPowerOutputList.Count.ToString(), new Vector2(100f, 100f), null, Color.Red, "Debug", TextAlignment.CENTER, 0.5f);
+        //Frame.Add(DebugSprite);
     }
 }
 
-List<EnergyValue> AddValue(List<EnergyValue> OutputList, EnergyValue newEnergyValue)
+List<EnergyValue> AddValue(List<EnergyValue> OutputList, EnergyValue newEnergyValue) // Сделать удаление превышающих точек
 {
-    if (OutputList.Count == 20)
-        for (int i = 1; i < OutputList.Count; i++) OutputList[i - 1] = OutputList[i];
-    OutputList.Add(newEnergyValue);
+    OutputList.Insert(0, newEnergyValue);
     return OutputList;
 }
 
@@ -113,6 +137,33 @@ EnergyValue ConvertValue(EnergyValue energyValue)
     return energyValue;
 }
 
+EnergyValue ConvertValue(EnergyValue energyValue, string Magnitude)
+{
+    string currentMagnitude = energyValue.Magnitude;
+    
+    energyValue = ConvertValue(energyValue);
+
+    if (currentMagnitude == Magnitude) return energyValue;
+    else if (currentMagnitude == "W")
+    {
+        if (Magnitude == "kW") energyValue.Value /= 1000;
+        else if (Magnitude == "MW") energyValue.Value /= 1000000;
+    }
+    else if (currentMagnitude == "kW")
+    {
+        if (Magnitude == "W") energyValue.Value *= 1000;
+        else if (Magnitude == "MW") energyValue.Value /= 1000;
+    }
+    else if (currentMagnitude == "MW")
+    {
+        if (Magnitude == "kW") energyValue.Value *= 1000;
+        else if (Magnitude == "W") energyValue.Value *= 1000000;
+    }
+    energyValue.Magnitude = Magnitude;
+
+    return energyValue;
+}
+
 double Decemial(EnergyValue energy1, EnergyValue energy2)
 {
     if (energy1.Magnitude == "MW") energy1.DownMagnitude();
@@ -120,6 +171,12 @@ double Decemial(EnergyValue energy1, EnergyValue energy2)
     if (energy2.Magnitude == "MW") energy2.DownMagnitude();
     else if (energy2.Magnitude == "W") energy2.UpMagnitude();
     return energy1.Value / energy2.Value;
+}
+
+MySprite DrawLine(Vector2 Point1, Vector2 Point2, float Width, Color Color)
+{
+    Vector2 CenterVector = (Point1 + Point2) / 2;
+    return new MySprite(SpriteType.TEXTURE, "SquareSimple", CenterVector, new Vector2((Point1 - Point2).Length(), Width), Color, "", TextAlignment.CENTER, (float)Math.Atan((Point2.Y - Point1.Y) / (Point2.X - Point1.X)));
 }
 
 class EnergyValue
