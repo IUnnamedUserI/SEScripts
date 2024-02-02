@@ -7,11 +7,12 @@ int UPDATE_COUNTER = 0;
 const int MAX_UPDATE_COUNTER = 100;
 
 int UpdateTime = 1;
-string LCDPrefix = string.Empty;
+string LCDPrefix = "NEW_PREFIX";
 
 public Program()
 {
     Runtime.UpdateFrequency = UpdateFrequency.Update1;
+    if (Me.CustomData == string.Empty) SetDefaultData();
     Init();
 }
 
