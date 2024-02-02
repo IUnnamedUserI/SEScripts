@@ -1,6 +1,5 @@
-IMyTextPanel Monitor;
-
 List<IMyPowerProducer> PowerList = new List<IMyPowerProducer>();
+List<IMyTextPanel> TextPanelList = new List<IMyTextPanel>();
 List<EnergyValue> currentPowerOutputList = new List<EnergyValue>();
 
 int POWER_INIT_COUNTER = 0;
@@ -17,8 +16,8 @@ void Init()
 {
     try
     {
-        Monitor = (IMyTextPanel)GridTerminalSystem.GetBlockWithName("Computer Monitor");
         GridTerminalSystem.GetBlocksOfType<IMyPowerProducer>(PowerList, (p) => p.IsWorking);
+        GridTerminalSystem.GetBlocksOfType<IMyTextPanel>(TextPanelList, (t) => t.DisplayNameText.Contains("<EnergyLCD>"));
         Runtime.UpdateFrequency = UpdateFrequency.Update1;
     }
     catch { Echo("Init error"); }
@@ -33,15 +32,13 @@ public void Main(string argument)
         Init();
         POWER_INIT_COUNTER = 0;
     }
-    if (Monitor == null)
-    {
-        Echo("Monitor not found");
-        Runtime.UpdateFrequency = UpdateFrequency.None;
-    }
 
-    Monitor.ContentType = ContentType.NONE;
-    Monitor.ContentType = ContentType.SCRIPT;
-    Monitor.ScriptBackgroundColor = Color.Black;
+    foreach (IMyTextPanel textPanel in TextPanelList)
+    {
+        textPanel.ContentType = ContentType.NONE;
+        textPanel.ContentType = ContentType.SCRIPT;
+        textPanel.ScriptBackgroundColor = Color.Black;
+    }
 
     EnergyValue maxOutput = new EnergyValue();
     foreach (IMyPowerProducer powerProducer in PowerList) maxOutput.Value += powerProducer.MaxOutput;
@@ -61,64 +58,62 @@ public void Main(string argument)
         UPDATE_COUNTER = 0;
     }
 
-    Vector2 MonitorSize = Monitor.TextureSize;
-
-    using (MySpriteDrawFrame Frame = Monitor.DrawFrame())
+    foreach (IMyTextPanel textPanel in TextPanelList)
     {
-        double value = 0;
-        for (int i = 10; i >= 0; i--)
+        using (MySpriteDrawFrame Frame = textPanel.DrawFrame())
         {
-            float height = 15f + i * 42f;
-            MySprite MaxOutput = new MySprite(SpriteType.TEXT, value.ToString(), new Vector2(35f, height), null, Color.Green, "Debug", TextAlignment.RIGHT, 0.5f);
-            Frame.Add(MaxOutput);
-            value += Math.Round(maxOutput.Value / 10, 1);
-        }
-
-        for (int w = 0; w < 22; w++)
-            for (int h = 0; h < 11; h++)
+            double value = 0;
+            for (int i = 10; i >= 0; i--)
             {
-                MySprite Square = new MySprite(SpriteType.TEXTURE, "SquareHollow", new Vector2(50f + w * 22.5f, 430 - h * 45f), new Vector2(22.5f, 45), new Color(0, 8, 0), "", TextAlignment.CENTER, 0f);
-                Frame.Add(Square);
+                float height = 15f + i * 42f;
+                MySprite MaxOutput = new MySprite(SpriteType.TEXT, value.ToString(), new Vector2(35f, height), null, Color.Green, "Debug", TextAlignment.RIGHT, 0.5f);
+                Frame.Add(MaxOutput);
+                value += Math.Round(maxOutput.Value / 10, 1);
             }
 
-        MySprite MaxMagnitudeSprite = new MySprite(SpriteType.TEXT, maxOutput.Magnitude, new Vector2(20f, 5f), null, Color.Green, "Debug", TextAlignment.LEFT, 0.4f);
-        Frame.Add(MaxMagnitudeSprite);
-        
-        MySprite VerticalLine = new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(40f, 230f), new Vector2(1f, 445f), Color.Green, "", TextAlignment.CENTER, 0f);
-        Frame.Add(VerticalLine);
-        MySprite HorizontalLine = new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(40f, 451.75f), new Vector2(470f, 1f), Color.Green, "", TextAlignment.LEFT, 0f);
-        Frame.Add(HorizontalLine);
-
-        for (int i = 0; i < 21; i++)
-        {
-            int timeValue = i;
-            float width = 40f + i * 22f;
-            MySprite CurrentOutput = new MySprite(SpriteType.TEXT, timeValue.ToString(), new Vector2(width, 453f), null, Color.Green, "Debug", TextAlignment.LEFT, 0.5f);
-            Frame.Add(CurrentOutput);
-        }
-
-        int plankCount = 0;
-        foreach (EnergyValue energyValue in currentPowerOutputList)
-        {
-            try
-            {
-                float width = 40f + plankCount * 22f;
-                float height = (float)(450 - 435 * (Decemial(ConvertValue(new EnergyValue(energyValue.Value * 100, energyValue.Magnitude)), maxOutput)) / 100);
-                MySprite Mark = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(width, height), new Vector2(1f, 1f), Color.Red, "", TextAlignment.CENTER, 0f);
-                Frame.Add(Mark);
-                if (plankCount > 0)
+            for (int w = 0; w < 22; w++)
+                for (int h = 0; h < 11; h++)
                 {
-                    int heightPrev = (int)Math.Round(450 - 435 * (Decemial(ConvertValue(new EnergyValue(currentPowerOutputList[plankCount - 1].Value * 100, currentPowerOutputList[plankCount - 1].Magnitude)), maxOutput)) / 100);
-                    MySprite Line = DrawLine(new Vector2((int)Math.Round(width), (int)Math.Round(height)), new Vector2(40 + (plankCount - 1) * 22, heightPrev), 1f, Color.Yellow);
-                    Frame.Add(Line);
+                    MySprite Square = new MySprite(SpriteType.TEXTURE, "SquareHollow", new Vector2(50f + w * 22.5f, 430 - h * 45f), new Vector2(22.5f, 45), new Color(0, 8, 0), "", TextAlignment.CENTER, 0f);
+                    Frame.Add(Square);
                 }
-                plankCount++;
-            }
-            catch {}
-        }
 
-        //MySprite DebugSprite = new MySprite(SpriteType.TEXT, currentPowerOutputList.Count.ToString(), new Vector2(100f, 100f), null, Color.Red, "Debug", TextAlignment.CENTER, 0.5f);
-        //Frame.Add(DebugSprite);
+            MySprite MaxMagnitudeSprite = new MySprite(SpriteType.TEXT, maxOutput.Magnitude, new Vector2(20f, 5f), null, Color.Green, "Debug", TextAlignment.LEFT, 0.4f);
+            Frame.Add(MaxMagnitudeSprite);
+            
+            MySprite VerticalLine = new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(40f, 230f), new Vector2(1f, 445f), Color.Green, "", TextAlignment.CENTER, 0f);
+            Frame.Add(VerticalLine);
+            MySprite HorizontalLine = new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(40f, 451.75f), new Vector2(470f, 1f), Color.Green, "", TextAlignment.LEFT, 0f);
+            Frame.Add(HorizontalLine);
+
+            for (int i = 0; i < 21; i++)
+            {
+                int timeValue = i;
+                float width = 40f + i * 22f;
+                MySprite CurrentOutput = new MySprite(SpriteType.TEXT, timeValue.ToString(), new Vector2(width, 453f), null, Color.Green, "Debug", TextAlignment.LEFT, 0.5f);
+                Frame.Add(CurrentOutput);
+            }
+
+            int plankCount = 0;
+            foreach (EnergyValue energyValue in currentPowerOutputList)
+            {
+                try
+                {
+                    float width = 40f + plankCount * 22f;
+                    float height = (float)(450 - 435 * (Decemial(ConvertValue(new EnergyValue(energyValue.Value * 100, energyValue.Magnitude)), maxOutput)) / 100);
+                    MySprite Mark = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(width, height), new Vector2(1f, 1f), Color.Red, "", TextAlignment.CENTER, 0f);
+                    Frame.Add(Mark);
+                    if (plankCount > 0)
+                    {
+                        int heightPrev = (int)Math.Round(450 - 435 * (Decemial(ConvertValue(new EnergyValue(currentPowerOutputList[plankCount - 1].Value * 100, currentPowerOutputList[plankCount - 1].Magnitude)), maxOutput)) / 100);
+                        MySprite Line = DrawLine(new Vector2((int)Math.Round(width), (int)Math.Round(height)), new Vector2(40 + (plankCount - 1) * 22, heightPrev), 1f, Color.Yellow);
+                        Frame.Add(Line);
+                    }
+                    plankCount++;
+                }
+                catch {}
+            }
+        }
     }
 }
 
