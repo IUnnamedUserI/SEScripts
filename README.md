@@ -1,2 +1,2 @@
 Скрипты, используемые в Space Engineers
-Автор: UnnamedUser
+Автор UnnamedUser
