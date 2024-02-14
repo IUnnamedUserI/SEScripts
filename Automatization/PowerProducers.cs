@@ -8,6 +8,7 @@ const int MAX_UPDATE_COUNTER = 100;
 
 int UpdateTime = 1;
 string LCDPrefix = "NEW_PREFIX";
+Color MainColor, GridColor, BackgroundColor, MarksColor;
 
 public Program()
 {
@@ -39,15 +40,16 @@ public void Main(string argument)
         POWER_INIT_COUNTER = 0;
     }
 
+    //Init params
     int PrevUpdateTime = UpdateTime;
     string[] programData = Me.CustomData.Split('\n');
     LCDPrefix = programData[0].Split('=')[1];
-    Color MainColor = ConvertStringToColor(programData[1].Split('=')[1]);
-    Color GridColor = ConvertStringToColor(programData[2].Split('=')[1]);
-    Color BackgroundColor = ConvertStringToColor(programData[3].Split('=')[1]);
-    Color MarksColor = ConvertStringToColor(programData[4].Split('=')[1]);
-    UpdateTime = int.Parse(programData[5].Split('=')[1]);
-
+    try { MainColor = ConvertStringToColor(programData[1].Split('=')[1]); } catch { MainColor = new Color(0, 255, 0); }
+    try { GridColor = ConvertStringToColor(programData[2].Split('=')[1]); } catch { GridColor = new Color(0, 8, 0); }
+    try { BackgroundColor = ConvertStringToColor(programData[3].Split('=')[1]); } catch { BackgroundColor = new Color(0, 0, 0); }
+    try { MarksColor = ConvertStringToColor(programData[4].Split('=')[1]); } catch { MarksColor = new Color(255, 255, 0); }
+    try { UpdateTime = int.Parse(programData[5].Split('=')[1]); } catch { UpdateTime = 1; }
+    
     if (PrevUpdateTime != UpdateTime)
     {
         UPDATE_COUNTER = 0;
