@@ -10,8 +10,8 @@ IMyRadioAntenna Antenna;
 
 Vector2 CenterScreen;
 LandingArea CurrentLandingArea;
-int Counter = 0;
 ContextMenu PrevMenu, CurrentMenu, Control, InstructorMenu, GPSMenu, GPSListMenu;
+int Counter = 0;
 bool IsLandingChassis = true;
 bool IsStels = false;
 
@@ -42,9 +42,8 @@ public Program()
 
 void Init()
 {
-    /*
-    Инициализация дополнительных модулей
-    */
+    // Метод дополнительной инициализации некоторых модулей.
+
     for (int i = 0; Cockpit == null; i++) { if (CockpitList[i].IsFunctional) Cockpit = CockpitList[i]; } // Инициализация кокпита
     LandingAreaList = GetLandingPoints(Cockpit); // Получение статичных точек приземления из кокпита
     Stels(true); // Отключение стелс-режима
@@ -69,9 +68,7 @@ void Main(string argument)
 
 void DrawLandingSystem()
 {
-    /*
-    Отрисовка посадочной системы
-    */
+    // Метод для отрисовки посадочной системы.
 
     LandingSurface.ContentType = ContentType.NONE; LandingSurface.ContentType = ContentType.SCRIPT;
     using (MySpriteDrawFrame Frame = LandingSurface.DrawFrame())
@@ -140,9 +137,9 @@ void DrawLandingSystem()
 
 string GetAntennaData(string Data)
 {
-    /*
-    Получение данных с антенны - имя и частота
-    */
+    // Метод принимает стрковое значение данных, сравнивает их с данными антенны
+    // и возвращает значение параметра. В противном случае возвращает сообщение о потери данных.
+    
     string[] AntennaData = Antenna.CustomData.Split('\n');
     switch (Data)
     {
@@ -152,12 +149,14 @@ string GetAntennaData(string Data)
     return "Data not found";
 }
 
-double GetDistance(Vector3D Point) { return (Cockpit.CenterOfMass - Point).Length(); }
+double GetDistance(Vector3D Point) { return (Cockpit.CenterOfMass - Point).Length(); } // Метод возвращает вещественное значение дистанции между вертолётом и точкой.
 
-double GetDistance(LandingArea Area) { return (Cockpit.CenterOfMass - Area.LandingVector).Length(); }
+double GetDistance(LandingArea Area) { return (Cockpit.CenterOfMass - Area.LandingVector).Length(); } // Метод возвращает вещественное значение дистанции между вертолётом и посадочной зоны.
 
 double GetAngleBetweenVectors(Vector3D ForwardVector, Vector3D RightVector, Vector3D EntityVector)
 {
+    // Метод возвращает вещественное число, представляющее собой угол между двумя векторами (в градусах).
+
     double Cos = EntityVector.Dot(ForwardVector);
     double Sin = EntityVector.Dot(RightVector);
     return Math.Atan2(Sin, Cos) / Math.PI * 180;
@@ -165,6 +164,9 @@ double GetAngleBetweenVectors(Vector3D ForwardVector, Vector3D RightVector, Vect
 
 void GetMessage()
 {
+    // Метод прослушивает частоту вещания и принимает сообщения.
+    // В сообщении указывается точка посадки.
+
     Me.CustomData = string.Empty;
     MyIGCMessage Message = new MyIGCMessage();
     IMyBroadcastListener Listener = IGC.RegisterBroadcastListener(GetAntennaData("Frequency"));
@@ -178,6 +180,8 @@ void GetMessage()
 
 List<LandingArea> GetLandingPoints(IMyTerminalBlock Block)
 {
+    // Метод возвращает список посадочных посадок.
+
     List<LandingArea> AreaList = new List<LandingArea>();
     if (Block.CustomData != string.Empty)
     {
@@ -193,6 +197,8 @@ List<LandingArea> GetLandingPoints(IMyTerminalBlock Block)
 
 void ButtonClick(Button Object_Button)
 {
+    // Метод принимает кнопку в качестве объекта, и иммитирует нажание на неё.
+
     string Tag = Object_Button.Tag;
     switch (Tag)
     {
@@ -254,12 +260,16 @@ void ButtonClick(Button Object_Button)
 
 void ShowMenu(ContextMenu Menu)
 {
+    // Метод принимает контекстное меню и отрисовывает его на дополнительном экране.
+
     ContextScreen.ContentType = ContentType.NONE; ContextScreen.ContentType = ContentType.SCRIPT;
     using (MySpriteDrawFrame Frame = ContextScreen.DrawFrame()) { Frame.AddRange(Menu.DrawMenu()); }
 }
 
 void DrawContextMenu(string ControlName)
 {
+    // Метод для отрисовки контекстного меню.
+
     switch (ControlName)
     {
         case "Управление": ShowMenu(Control); break;
@@ -274,6 +284,8 @@ void DrawContextMenu(string ControlName)
 
 void CreateControlScreen()
 {
+    // Метод создаёт начальное меню.
+
     Control = new ContextMenu("Управление");
     Control.CreateButton("Шасси", "LandingGears");
     Control.CreateButton("Стелс", "Stels");
@@ -283,6 +295,8 @@ void CreateControlScreen()
 
 void CreateInstructorScreen()
 {
+    // Метод создаёт экран для управления инструктором.
+
     InstructorMenu = new ContextMenu("Инструктор");
     InstructorMenu.CreateButton("< Назад", "Back");
     InstructorMenu.CreateButton("Вкл/выкл Инструктор", "Instructor", GetParam("Инструктор"));
@@ -293,6 +307,8 @@ void CreateInstructorScreen()
 
 void CreateGPSScreen()
 {
+    // Метод создаёт экран для управления системой навигации.
+
     GPSMenu = new ContextMenu("GPS");
     GPSMenu.CreateButton("< Назад", "Back");
     GPSMenu.CreateButton("Список точек", "StaticLandingAreaList");
@@ -301,16 +317,20 @@ void CreateGPSScreen()
 
 void CreateGPSListScreen()
 {
+    // Метод создаёт экран для вывода списка посадочных зон.
+
     GPSListMenu = new ContextMenu("Список точек");
     GPSListMenu.CreateButton("< Назад", "Back");
     foreach (LandingArea GPSPoint in GPSList)
         GPSListMenu.CreateGPSButton(GPSPoint.AreaName, GPSPoint.LandingVector);
 }
 
-//CurrentLandingArea
-
 void Stels(bool StelsEnabled)
 {
+    // Метод включает систему "стелса". Функционально он
+    // отключает вещание антенны, выключает все световые приборы и
+    // отключает освещение шасси при посадке или взлёте.
+
     IsStels = StelsEnabled;
     List<IMyInteriorLight> InteriorLightList = new List<IMyInteriorLight>();
     GridTerminalSystem.GetBlocksOfType<IMyInteriorLight>(InteriorLightList, (l) => !l.DisplayNameText.Contains("Landing"));
@@ -330,6 +350,8 @@ void Stels(bool StelsEnabled)
 
 void ChangeParam(string Param)
 {
+    // Метод для изменения значения параметров (Вкл/Выкл).
+
     IMyProgrammableBlock MainPB = (IMyProgrammableBlock)GridTerminalSystem.GetBlockWithName("Program - Main Systems");
     string PBData = MainPB.CustomData;
     string[] Data = PBData.Split('\n');
@@ -347,6 +369,9 @@ void ChangeParam(string Param)
 
 public Color GetParam(string Param)
 {
+    // Метод возвращает цвет в зависимости от значения параметра.
+    //Зелёный цвет при значении параметра "Вкл", красный при значении параметра "Выкл".
+
     IMyProgrammableBlock MainPB = (IMyProgrammableBlock)GridTerminalSystem.GetBlockWithName("Program - Main Systems");
     string PBData = MainPB.CustomData;
     string[] Data = PBData.Split('\n');
@@ -361,12 +386,14 @@ public Color GetParam(string Param)
 
 class LandingArea
 {
-    //Формат точек: Название:X:Y:Z
+    // Формат точек: Название:X:Y:Z
     public string AreaName;
     public Vector3D LandingVector;
 
     public LandingArea(string PointName, Vector3D LandingPoint)
     {
+        // Публичный метод создания нового объекта.
+        
         AreaName = PointName;
         LandingVector = LandingPoint;
     }
@@ -382,6 +409,8 @@ class ContextMenu
 
     public ContextMenu()
     {
+        // Публичный метод создания нового объекта.
+
         Title = "Меню";
         ButtonList = new List<Button>();
         SelectedButtonID = 0;
@@ -389,6 +418,8 @@ class ContextMenu
 
     public ContextMenu(string Title)
     {
+        // Публичный метод создания нового объекта с приёмом названия.
+
         this.Title = Title;
         ButtonList = new List<Button>();
         SelectedButtonID = 0;
@@ -396,6 +427,8 @@ class ContextMenu
 
     public List<MySprite> DrawMenu()
     {
+        // Метод возвращает список спрайтов, в котором содержатся элементы для отрисовки меню.
+
         List<MySprite> SpriteList = new List<MySprite>();
         MySprite Border = new MySprite(SpriteType.TEXTURE, "SquareSimple", CenterScreen, new Vector2(420f, 420f), Color.Green, "", TextAlignment.CENTER, 0f);
         SpriteList.Add(Border);
@@ -416,6 +449,8 @@ class ContextMenu
 
     public void CreateButton(string Name, string Tag)
     {
+        // Метод создания кнопки для текущего меню.
+
         Button Btn = new Button(Name, new Vector2(65f, 100 + 40 * ButtonList.Count), Tag, Color.Green);
         ButtonList.Add(Btn);
         SelectButtonID(SelectedButtonID);
@@ -423,6 +458,8 @@ class ContextMenu
 
     public void CreateButton(string Name, string Tag, Color ButtonColor)
     {
+        // Метод создания кнопки для текущего меню с указанием цвета.
+
         Button Btn = new Button(Name, new Vector2(65f, 100 + 40 * ButtonList.Count), Tag, ButtonColor);
         ButtonList.Add(Btn);
         SelectButtonID(SelectedButtonID);
@@ -430,6 +467,8 @@ class ContextMenu
 
     public void CreateGPSButton(string Name, Vector3D Coords)
     {
+        // Метод создания кнопки системы навигации.
+
         Button Btn = new Button(Name, new Vector2(65f, 100 + 40 * ButtonList.Count), Coords.ToString(), Color.Green);
         ButtonList.Add(Btn);
         SelectButtonID(SelectedButtonID);
@@ -437,6 +476,8 @@ class ContextMenu
 
     public void SwitchUp()
     {
+        // Метод переключения текущей кнопки на 1 позицию вверх.
+
         if (SelectedButtonID > 0)
         {
             SelectedButtonID--;
@@ -447,6 +488,8 @@ class ContextMenu
 
     public void SwitchDown()
     {
+        // Метод переключения текущей кнопки на 1 позицию вниз.
+
         if (SelectedButtonID < ButtonList.Count - 1)
         {
             SelectedButtonID++;
@@ -457,6 +500,8 @@ class ContextMenu
 
     public void SelectButtonID(int ButtonID)
     {
+        // Метод выбора кнопки по ID.
+
         SelectedButtonID = ButtonID;
         foreach (Button Object_Button in ButtonList) Object_Button.DisselectButton();
         ButtonList[SelectedButtonID].SelectButton();
@@ -480,6 +525,8 @@ class Button
 
     public Button(string Text, Vector2 Position, string Tag, Color ButtonColor)
     {
+        // Публичный метод создания объекта.
+
         this.Text = Text;
         this.Position = Position;
         this.Tag = Tag;
@@ -489,6 +536,8 @@ class Button
 
     public List<MySprite> DrawButton()
     {
+        // Метод возвращает список спрайтов, в котором находятся элементы отрисовки кнопки.
+
         Color BorderColor = Color.White;
         if (IsSelected) BorderColor = Color.Green; else BorderColor = Color.Black;
         List<MySprite> ButtonList = new List<MySprite>();

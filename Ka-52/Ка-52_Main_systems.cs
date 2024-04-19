@@ -19,10 +19,12 @@ IMyMotorStator ChainElevation, ChainAzimuth, CameraElevation, CameraAzimuth;
 IMyMotorStator LeftDoor, RightDoor;
 IMyTextPanel FighterLCD;
 
+/*
 IMySmallMissileLauncher MissileLauncher1, MissileLauncher2;
 IMySmallMissileLauncher Bomb1, Bomb2;
 IMySmallMissileLauncher Missile1, Missile2;
 IMySmallGatlingGun ChainGun;
+*/
 
 List<IMyCockpit> CockpitList = new List<IMyCockpit>();
 List<IMyGasTank> GasTankList = new List<IMyGasTank>();
@@ -59,13 +61,13 @@ public Program()
     Camera = (IMyCameraBlock)GridTerminalSystem.GetBlockWithName("FLIR Camera System (IRNV)");
     Camera.EnableRaycast = true;
 
-    MissileLauncher1 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("Hydra Rocket Pod 2");
-    MissileLauncher2 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("Hydra Rocket Pod 3");
-    Bomb1 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("1000lb Bomb Mount");
-    Bomb2 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("1000lb Bomb Mount 2");
-    Missile1 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("AIM-54 Mount");
-    Missile2 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("AIM-54 Mount 2");
-    ChainGun = (IMySmallGatlingGun)GridTerminalSystem.GetBlockWithName("30mm Chain Gun");
+    //MissileLauncher1 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("Hydra Rocket Pod 2");
+    //MissileLauncher2 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("Hydra Rocket Pod 3");
+    //Bomb1 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("1000lb Bomb Mount");
+    //Bomb2 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("1000lb Bomb Mount 2");
+    //Missile1 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("AIM-54 Mount");
+    //Missile2 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("AIM-54 Mount 2");
+    //ChainGun = (IMySmallGatlingGun)GridTerminalSystem.GetBlockWithName("30mm Chain Gun");
 
     LeftDoor = (IMyMotorStator)GridTerminalSystem.GetBlockWithName("Left Door Hinge");
     RightDoor = (IMyMotorStator)GridTerminalSystem.GetBlockWithName("Right Door Hinge");
@@ -145,13 +147,11 @@ void Main(string argument)
     catch { Echo("Main() - Error"); }
 }
 
-void CameraLock(Vector3D TargetPosition) // Сделать слежение камерой
-{
-    Vector3D MyPosition = Camera.GetPosition();
-}
-
 void DrawInfo()
 {
+    // Метод отрисовывает на дисплее графическую информацию о
+    // состоянии вертолёта, а также некоторые важные данные.
+
     Surface1.ContentType = ContentType.NONE; Surface1.ContentType = ContentType.SCRIPT;
     
     using (MySpriteDrawFrame Frame = Surface1.DrawFrame())
@@ -244,7 +244,7 @@ void DrawInfo()
         Frame.Add(Helicopter);
 
         //v-----Подвесное вооружение-----v
-        Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X - 60, 405f), new Vector2(20f, 20f), GetBlockEnabled(Missile1), "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
+        /*Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X - 60, 405f), new Vector2(20f, 20f), GetBlockEnabled(Missile1), "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
         Frame.Add(Helicopter);
         Helicopter = new MySprite(SpriteType.TEXT, GetInventoryCount(Missile1).ToString(), new Vector2((float)(CenterScreen.X - 62.5), 415f), null, GetBlockEnabled(Missile1), "Debug", TextAlignment.CENTER, 0.675f);
         Frame.Add(Helicopter);
@@ -279,7 +279,7 @@ void DrawInfo()
         Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X + 30, 420f), new Vector2(10f, 10f), GetBlockEnabled(ChainGun), "", TextAlignment.CENTER, 0f);
         Frame.Add(Helicopter);
         Helicopter = new MySprite(SpriteType.TEXT, GetInventoryCount(ChainGun).ToString(), new Vector2(CenterScreen.X, 410f), null, Color.Black, "Debug", TextAlignment.CENTER, 0.7f);
-        Frame.Add(Helicopter);
+        Frame.Add(Helicopter);*/
 
         //v-----Шасси-----v
         if (WheelHingeList[0].TargetVelocityRPM > 0)
@@ -294,8 +294,10 @@ void DrawInfo()
     }   
 }
 
-void SetHorizon() // Расчёт и установка грида относительно горизонта
+void SetHorizon()
 {
+    // Метод расчитывает и устанавливает вертолёт в прямое положение относительно горизонта.
+
     Vector3D GravityVector = PilotCockpit.GetNaturalGravity();
     Vector3D GravityNormalize = Vector3D.Normalize(GravityVector);
 
@@ -312,6 +314,8 @@ void SetHorizon() // Расчёт и установка грида относи�
 
 float GetHorizon()
 {
+    // Метод возвращает действительное значение наклона вертолёта по координате Z.
+
     Vector3D GravityVector = PilotCockpit.GetNaturalGravity();
     Vector3D GravityNormalize = Vector3D.Normalize(GravityVector);
 
@@ -321,8 +325,23 @@ float GetHorizon()
     return (float)Math.Atan2(GravityLeft, -GravityUp);
 }
 
-void Dumpeners() // Расчёт и наклон грида для погашения боковой скорости
+float GetPitch()
 {
+    // Метод возвращает действительное значение наклона вертолёта по координате Y.
+
+    Vector3D GravityVector = PilotCockpit.GetNaturalGravity();
+    Vector3D GravityNormalize = Vector3D.Normalize(GravityVector);
+
+    double GravityForward = GravityNormalize.Dot(PilotCockpit.WorldMatrix.Forward);
+    double GravityUp = GravityNormalize.Dot(PilotCockpit.WorldMatrix.Up);
+
+    return (float)Math.Atan2(GravityForward, -GravityUp);
+}
+
+void Dumpeners()
+{
+    // Метод расчитывает и применяет угол наклона вертолёта для погашения боковой скорости.
+
     Vector3D SpeedVector = PilotCockpit.GetShipVelocities().LinearVelocity;
     Vector3D GravityNormalize = Vector3D.Normalize(PilotCockpit.GetNaturalGravity());
     Vector3D VProf = Vector3D.ProjectOnPlane(ref SpeedVector, ref GravityNormalize);
@@ -336,10 +355,12 @@ void Dumpeners() // Расчёт и наклон грида для погаше�
     Gyroscope.Roll = -(float)VProf.Dot(PilotCockpit.WorldMatrix.Right) * 0.01f;
 }
 
-void SetAntennaData() { Antenna.CustomData = "Имя: Пилот_Ка-52\nЧастота: 100.0"; } // Установка стандартные данных антенны (Требует переработку)
+void SetAntennaData() { Antenna.CustomData = "Имя: Пилот_Ка-52\nЧастота: 100.0"; } // Установка стандартных данных антенны (Требует переработку)
 
-string GetAntennaData(string Data) // Получение данных антенны
+string GetAntennaData(string Data)
 {
+    // Метод возвращает данные антенны (имя и частота).
+
     string[] AntennaData = Antenna.CustomData.Split('\n');
     switch (Data)
     {
@@ -349,27 +370,37 @@ string GetAntennaData(string Data) // Получение данных антен
     return "Неизвестные данные";
 }
 
-double GetAltitude() // Возврат высоты относительно уровня моря
+double GetAltitude()
 {
+    // Метод возвращает действительное значение, указывающее
+    // на высоту вертолёта над уровнем моря (уровень моря задаётся переменной SeaAltitude).
+
     double Vector = (PilotCockpit.GetPosition() - PlanetVector).Length() - (SeaAltitude - PlanetVector).Length();
     return Math.Round(Vector);
 }
 
 double GetFuelPrecentage() // Возврат процентного значения водорода в баках
 {
+    // Метод, возвращающий действительное значение, указывающее процент
+    // остатка водорода в баках без учёта двигаталей.
+
     double CurrentFuel = 0f;
     foreach (IMyGasTank Object_HydrogenTank in GasTankList) { CurrentFuel += Object_HydrogenTank.FilledRatio * 100; }
     return CurrentFuel / GasTankList.Count;
 }
 
-void PlaySound(string SoundName) // Проигрователь звуков
+void PlaySound(string SoundName)
 {
+    // Метод, включающий в динамике указанный звук
+
     Sound.SelectedSound = SoundName;
     Sound.Play();
 }
 
-MyFixedPoint GetInventoryCount(IMyTerminalBlock Block) // Получение количества предметов в инвентаре блока
+MyFixedPoint GetInventoryCount(IMyTerminalBlock Block)
 {
+    // Метод возвращает количественное значение элементов в инвентаре указанного блока.
+
     if (Block != null)
     {
         IMyInventory Inventory = Block.GetInventory(0);
@@ -384,31 +415,56 @@ MyFixedPoint GetInventoryCount(IMyTerminalBlock Block) // Получение к�
 
 MySprite DrawLine(Vector2 Point1, Vector2 Point2, float Width, Color Color) // Отрисовка линии
 {
+    // Метод возвращает спрайт, который из себя представляет линию.
+    // Входные данные:
+    // Point1 - вектор начальной точки линии (X, Y)
+    // Point2 - вектор конечной точки линии (X, Y)
+    // Width - ширина линии (в пикселях)
+
     Vector2 CenterVector = (Point1 + Point2) / 2;
     return new MySprite(SpriteType.TEXTURE, "SquareSimple", CenterVector, new Vector2((Point1 - Point2).Length(), Width), Color, "", TextAlignment.CENTER, (float)Math.Atan((Point2.Y - Point1.Y) / (Point2.X - Point1.X)));
 }
 
-MySprite DrawLine(Vector2 Point1, Vector2 Point2, float Width, Color Color, float Rotate) // Отрисовка линии
+MySprite DrawLine(Vector2 Point1, Vector2 Point2, float Width, Color Color, float Rotate)
 {
+    // Метод возвращает спрайт, который из себя представляет линию.
+    // Текущий метод, в отличие от предыдущего, учитывает угол поворота линии (в радианах).
+    // Входные данные:
+    // Point1 - вектор начальной точки линии (X, Y)
+    // Point2 - вектор конечной точки линии (X, Y)
+    // Width - ширина линии (в пикселях)
+
     Vector2 CenterVector = (Point1 + Point2) / 2;
     return new MySprite(SpriteType.TEXTURE, "SquareSimple", CenterVector, new Vector2((Point1 - Point2).Length(), Width), Color, "", TextAlignment.CENTER, Rotate);
 }
 
-Color GetBlockEnabled(IMyTerminalBlock Block) // Получение цвета блока в индикации (по ссылке на блок)
+Color GetBlockEnabled(IMyTerminalBlock Block)
 {
+    // Получение цвета блока в индикации (по ссылке на блок).
+    // Если блок не работает или повреждён до нерабочего состояния - метод возвращает красный цвет.
+    // Иначе вернёт зелёный.
+
     if (Block.IsWorking && Block != null) return Color.Green;
     else return Color.Maroon;
 }
 
-Color GetBlockEnabled(string BlockName) // Получение цвета блока в индикации (по названия блока)
+Color GetBlockEnabled(string BlockName)
 {
+    // Получение цвета блока в индикации (по названия блока).
+    // Если блок не работает или повреждён до нерабочего состояния - метод возвращает красный цвет.
+    // Иначе вернёт зелёный.
+
     IMyTerminalBlock Block = (IMyTerminalBlock)GridTerminalSystem.GetBlockWithName(BlockName);
     if (Block.IsWorking && Block != null) return Color.Green;
     else return Color.Maroon;
 }
 
-void SetDefaultSystemData() // Установка стандартных значений
+void SetDefaultSystemData()
 {
+    // Метод устанавливает стандартные значения для работы некоторых систем
+    // вертолёта, а также для индикации на главной панели.
+    // Используется в случае первого запуска, ошибки системы или для "обнуления" данных.
+
     string Data = "[-----=====|=====-----]" +
                     "\nИнструктор:" + ReturnOnOff(Instructor) +
                     "\nУдержание горизонта:" + ReturnOnOff(Horizon) +
@@ -419,6 +475,9 @@ void SetDefaultSystemData() // Установка стандартных зна�
 
 void GetSystemData()
 {
+    // Метод вытаскивает тектовые данные из текущего программного блока,
+    // помещая их значения в соответствующие переменные.
+
     string[] Data = Me.CustomData.Split('\n');
     Instructor = ReturnOnOff(Data[1].Split(':')[1]);
     Horizon = ReturnOnOff(Data[2].Split(':')[1]);
@@ -428,26 +487,69 @@ void GetSystemData()
 
 string ReturnOnOff(bool Param)
 {
+    // Метод возвращает строковое значение типа "Вкл/Выкл", получив булевое значение.
+
     if (Param) return "Вкл.";
     else return "Выкл.";
 }
 
 bool ReturnOnOff(string Param)
 {
+    // Метод возвращает булевое значение, получив строковое значение типа "Вкл/Выкл".
+
     if (Param == "Вкл.") return true;
     else return false;
 }
 
-// MySprite(SpriteType.TEXTURE, "SquareSimple", CenterVector, new Vector2((Point1 - Point2).Length(), Width), Color, "", TextAlignment.CENTER, Rotate);
-
 void DrawHUD()
 {
-    FighterLCD.ContentType = ContentType.NONE; FighterLCD.ContentType = ContentType.SCRIPT;
+    // Метод для отрисовки HUD'а на дисплее.
+
+    FighterLCD.ContentType = ContentType.NONE;
+    FighterLCD.ContentType = ContentType.SCRIPT;
     FighterLCD.ScriptBackgroundColor = Color.Black;
     using (MySpriteDrawFrame Frame = FighterLCD.DrawFrame())
     {
-        Frame.Add(DrawLine(new Vector2(50f, 256f), new Vector2(462f, 256f), 2f, Color.Green, GetHorizon()));
-        MySprite BlackRectangle = new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(256f, 256f), new Vector2(40f, 10f), Color.Black, "", TextAlignment.CENTER, 0f);
-        Frame.Add(BlackRectangle);
+        Frame.Add(DrawLine(new Vector2(140f, 276f), new Vector2(372f, 276f), 2f, Color.Green, 0f));
+        Frame.Add(DrawLine(new Vector2(140f, 276f), new Vector2(372f, 276f), 2f, Color.Green, 0.5236f));
+        Frame.Add(DrawLine(new Vector2(140f, 276f), new Vector2(372f, 276f), 2f, Color.Green, -0.5236f));
+        Frame.Add(DrawLine(new Vector2(140f, 276f), new Vector2(372f, 276f), 2f, Color.Green, 1.0472f));
+        Frame.Add(DrawLine(new Vector2(140f, 276f), new Vector2(372f, 276f), 2f, Color.Green, -1.0472f));
+        
+        Frame.Add(DrawLine(new Vector2(155f, 276f), new Vector2(357f, 276f), 1f, Color.Green, 0.2618f));
+        Frame.Add(DrawLine(new Vector2(155f, 276f), new Vector2(357f, 276f), 1f, Color.Green, -0.2618f));
+        Frame.Add(DrawLine(new Vector2(155f, 276f), new Vector2(357f, 276f), 1f, Color.Green, 0.7854f));
+        Frame.Add(DrawLine(new Vector2(155f, 276f), new Vector2(357f, 276f), 1f, Color.Green, -0.7854f));
+
+        Frame.Add(new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(256f, 256f), new Vector2(170f, 170f), Color.Black, "", TextAlignment.CENTER, 0f));
+        Frame.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(256f, 127f), new Vector2(512f, 254f), Color.Black, "", TextAlignment.CENTER, 0f));
+
+        Frame.Add(DrawLine(new Vector2(190f, 276f), new Vector2(322f, 276f), 2f, Color.Green, GetHorizon()));
+        Frame.Add(new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(256f, 256f), new Vector2(50f, 50f), Color.Black, "", TextAlignment.CENTER, 0f));
+
+        Frame.Add(new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(256f, 276f), new Vector2(3f, 3f), Color.Green, "", TextAlignment.CENTER, 0f));
+
+        for (int i = -90; i < 90; i += 10)
+        {
+            float spriteHeight = (float)(-GetPitch() * 180 / Math.PI) * 6 + (256f + i * 6f);
+            Frame.Add(new MySprite(SpriteType.TEXT, (-i).ToString(), new Vector2(60f, spriteHeight), null, Color.Green, "Debug", TextAlignment.RIGHT, 1.15f));
+            if (i == 0) Frame.Add(DrawLine(new Vector2(60f * 1.15f + 5, spriteHeight + 15f), new Vector2(100f * 1.15f + 5, spriteHeight + 15f), 1f, Color.Green));
+            else if (-i > 0)
+            {
+                Frame.Add(DrawLine(new Vector2(60f * 1.15f + 5, spriteHeight + 15f), new Vector2(100f * 1.15f + 5, spriteHeight + 15f), 1f, Color.Green));
+                Frame.Add(DrawLine(new Vector2(60f * 1.15f + 5, spriteHeight + 15f), new Vector2(60f * 1.15f + 5, spriteHeight + 25f), 1f, Color.Green));
+                Frame.Add(DrawLine(new Vector2(70f * 1.15f + 5, spriteHeight + 15f), new Vector2(76f * 1.15f + 5, spriteHeight + 15f), 1f, Color.Black));
+                Frame.Add(DrawLine(new Vector2(86f * 1.15f + 5, spriteHeight + 15f), new Vector2(92f * 1.15f + 5, spriteHeight + 15f), 1f, Color.Black));
+            }
+            else if (-i < 0)
+            {
+                Frame.Add(DrawLine(new Vector2(60f * 1.15f + 5, spriteHeight + 15f), new Vector2(100f * 1.15f + 5, spriteHeight + 15f), 1f, Color.Green));
+                Frame.Add(DrawLine(new Vector2(60f * 1.15f + 5, spriteHeight + 15f), new Vector2(60f * 1.15f + 5, spriteHeight + 5f), 1f, Color.Green));
+            }
+        }
+        Frame.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(60f, 0f), new Vector2(200f, 217.5f), Color.Black, "", TextAlignment.CENTER, 0f));
+        Frame.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(60f, 512f), new Vector2(200f, 217.5f), Color.Black, "", TextAlignment.CENTER, 0f));
+
+        Frame.Add(new MySprite(SpriteType.TEXT, Math.Round(-GetPitch() * 180 / Math.PI).ToString(), new Vector2(256f, 450f), null, Color.Green, "Debug", TextAlignment.CENTER, 1.5f));
     }
 }
