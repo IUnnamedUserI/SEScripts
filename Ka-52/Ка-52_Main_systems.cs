@@ -35,10 +35,12 @@ List<IMyTerminalBlock> BlockList = new List<IMyTerminalBlock>();
 Vector2 CenterScreen;
 Vector3D SeaAltitude = new Vector3D(55131.6884012993, 28965.3612758834, -4376.76599661899);
 Vector3D PlanetVector = new Vector3D(0.5, 0.5, 0.5);
+Vector3D EnemyVector = new Vector3D();
 bool Instructor;
 bool Horizon;
 bool SpeedDumpeners;
 bool AimAssist;
+bool TargetLocked;
 
 const float CAMERA_SENSIVITY = 0.5f;
 
@@ -83,6 +85,7 @@ public Program()
     Horizon = true;
     SpeedDumpeners = false;
     AimAssist = true;
+    TargetLocked = false;
 
     Init();
     if (Antenna.CustomData == string.Empty) SetAntennaData();
@@ -104,6 +107,8 @@ void Main(string argument)
     if (argument == "SwitchInstructor") { Instructor = !Instructor; } // Переключение инструктора
     else if (argument == "SwitchHorizon") { Horizon = !Horizon; } // Переключение удержания горизонта
     else if (argument == "SwitchSpeedDumpeners") { SpeedDumpeners = !SpeedDumpeners; } // Переключение гасителя скорости
+    else if (argument == "TargetLock") { TargetLocked = true; EnemyVector = CameraLock(); }
+    else if (argument == "UnlockCamera") { TargetLocked = false; ResetAngles(); }
     
     if (!PilotCockpit.IsUnderControl)
     {
@@ -114,6 +119,7 @@ void Main(string argument)
     DrawInfo();
     GetSystemData();
     DrawHUD();
+    if (TargetLocked) CameraTracking(EnemyVector);
 
     try
     {
@@ -338,6 +344,19 @@ float GetPitch()
     return (float)Math.Atan2(GravityForward, -GravityUp);
 }
 
+float GetAzimuth()
+{
+    // Метод возвращает действительное значение наклона вертолёта по координате X.
+
+    Vector3D GravityVector = PilotCockpit.GetNaturalGravity();
+    Vector3D GravityNormalize = Vector3D.Normalize(GravityVector);
+
+    double GravityUp = GravityNormalize.Dot(PilotCockpit.WorldMatrix.Left);
+    double GravityLeft = GravityNormalize.Dot(PilotCockpit.WorldMatrix.Forward);
+
+    return (float)Math.Atan2(GravityUp, -GravityLeft);
+}
+
 void Dumpeners()
 {
     // Метод расчитывает и применяет угол наклона вертолёта для погашения боковой скорости.
@@ -551,5 +570,72 @@ void DrawHUD()
         Frame.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(60f, 512f), new Vector2(200f, 217.5f), Color.Black, "", TextAlignment.CENTER, 0f));
 
         Frame.Add(new MySprite(SpriteType.TEXT, Math.Round(-GetPitch() * 180 / Math.PI).ToString(), new Vector2(256f, 450f), null, Color.Green, "Debug", TextAlignment.CENTER, 1.5f));
+
+        Frame.Add(DrawLine(new Vector2(100f, 30f), new Vector2(412f, 30f), 1f, Color.Green));
+
+        int Azimuth = (int)(180 + Math.Round(GetAzimuth() * 180 / Math.PI));
+        Frame.Add(new MySprite(SpriteType.TEXT, Azimuth.ToString(), new Vector2(256f, 410f), null, Color.Green, "Debug", TextAlignment.CENTER, 1.5f));
     }
+}
+
+Vector3D CameraLock()
+{
+    MyDetectedEntityInfo entity = Camera.Raycast(2000, 0, 0);
+    Vector3D entityPosition = entity.HitPosition.Value;
+    return entityPosition;
+}
+
+void CameraTracking(Vector3D TargetPosition)
+{
+    if (TargetLocked)
+    {
+        Vector3D MyPosition = CameraAzimuth.GetPosition();
+        Vector3D DirectionToTarget = Vector3D.Normalize(TargetPosition - MyPosition);
+
+        double RotorRequiredAngle = GetAngleBetweenVectors(CameraAzimuth.WorldMatrix.Forward, CameraAzimuth.WorldMatrix.Right, DirectionToTarget) - 90;
+        double HingeRequiredAngle = 90 + GetAngleBetweenVectors(CameraElevation.WorldMatrix.Forward, CameraElevation.WorldMatrix.Right, DirectionToTarget);
+
+        double RotorCurrentAngle = CameraAzimuth.Angle * (180 / Math.PI);
+        if (RotorCurrentAngle > RotorRequiredAngle)
+        {
+            CameraAzimuth.UpperLimitDeg = 180;
+            CameraAzimuth.LowerLimitDeg = (float)RotorRequiredAngle;
+            CameraAzimuth.TargetVelocityRPM = -20f;
+        }
+        else if (RotorCurrentAngle < RotorRequiredAngle)
+        {
+            CameraAzimuth.UpperLimitDeg = (float)RotorRequiredAngle;
+            CameraAzimuth.LowerLimitDeg = -180;
+            CameraAzimuth.TargetVelocityRPM = 20f;
+        }
+
+        double HingeCurrentAngle = CameraElevation.Angle * (180 / Math.PI) + 90;
+        if (HingeCurrentAngle > HingeRequiredAngle)
+        {
+            CameraElevation.UpperLimitDeg = 90;
+            CameraElevation.LowerLimitDeg = (float)HingeRequiredAngle;
+            CameraElevation.TargetVelocityRPM = -20f;
+        }
+        else if (HingeCurrentAngle < HingeRequiredAngle)
+        {
+            CameraElevation.UpperLimitDeg = (float)RotorRequiredAngle;
+            CameraElevation.LowerLimitDeg = 0;
+            CameraElevation.TargetVelocityRPM = 20f;
+        }
+    }
+}
+
+private double GetAngleBetweenVectors(Vector3D VectorForward, Vector3D VectorRight, Vector3D EntityVector)
+{
+    double Cos = EntityVector.Dot(VectorForward);
+    double Sin = EntityVector.Dot(VectorRight);
+    return Math.Atan2(Sin, Cos) / Math.PI * 180;
+}
+
+private void ResetAngles()
+{
+    CameraAzimuth.UpperLimitDeg = 180f;
+    CameraAzimuth.LowerLimitDeg = -180f;
+    CameraElevation.UpperLimitDeg = 90f;
+    CameraElevation.LowerLimitDeg = 0f;
 }
