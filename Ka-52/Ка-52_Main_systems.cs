@@ -1,13 +1,17 @@
-//Ка-52 - Основные системы
+// Ка-52 - Основные системы
+// Правки 02.12.2025
 /*ToDo:
-1. Адаптивная индикация повреждений (-)
-2. Адаптивная глобальная система (-)
-3. !!! ДОДЕЛАТЬ РАБОТУ С ГЛОБАЛЬНЫМИ ДАННЫМИ !!! (-)
-4. Сопровождение цели камерой (-)
-5. Наведение вооружения (-)
+[ ] Отображение горизонтальной скорости
+[ ] Глобальная система регистрации повреждений
+    [ ] Шасси
+    [ ] Винты
+    [ ] Двигатели
+
+[ ] Перевод на кнопочные панели
+[ ] Индикация точки прицеливания авиапушки на дисплее пилота
 */
 
-IMyTextSurface Surface1;
+IMyTextSurface Surface1, Surface3;
 IMyCockpit PilotCockpit, CoPilotCockpit;
 IMyRadioAntenna Antenna;
 IMyCameraBlock Camera;
@@ -16,23 +20,22 @@ IMyPowerProducer LeftEngine, RightEngine;
 IMyThrust PropellerUp, PropellerLow;
 IMyGyro Gyroscope;
 IMyMotorStator ChainElevation, ChainAzimuth, CameraElevation, CameraAzimuth;
-IMyMotorStator LeftDoor, RightDoor;
+IMyMotorStator LeftCockpit, RightDoor, LeftDoor;
 IMyTextPanel FighterLCD;
 
-/*
-IMySmallMissileLauncher MissileLauncher1, MissileLauncher2;
-IMySmallMissileLauncher Bomb1, Bomb2;
-IMySmallMissileLauncher Missile1, Missile2;
-IMySmallGatlingGun ChainGun;
-*/
+IMyConveyorSorter ChainGun;
 
 List<IMyCockpit> CockpitList = new List<IMyCockpit>();
 List<IMyGasTank> GasTankList = new List<IMyGasTank>();
 List<IMyMotorStator> WheelHingeList = new List<IMyMotorStator>();
 List<IMyThrust> PropellerList = new List<IMyThrust>();
+List<IMyConveyorSorter> DecoyList = new List<IMyConveyorSorter>();
+List<IMyConveyorSorter> AdditionalWeapon = new List<IMyConveyorSorter>();
 List<IMyTerminalBlock> BlockList = new List<IMyTerminalBlock>();
 
 Vector2 CenterScreen;
+Vector3D _hudPosition;
+Vector3D _targetPosition = new Vector3D(10577.64, 384.53, -59721.03);
 Vector3D SeaAltitude = new Vector3D(55131.6884012993, 28965.3612758834, -4376.76599661899);
 Vector3D PlanetVector = new Vector3D(0.5, 0.5, 0.5);
 Vector3D EnemyVector = new Vector3D();
@@ -44,11 +47,14 @@ bool TargetLocked;
 
 const float CAMERA_SENSIVITY = 0.5f;
 
+float _triangleCounter = 0f;
+
 public Program()
 {
     Runtime.UpdateFrequency = UpdateFrequency.Update1;
 
     Surface1 = Me.GetSurface(0);
+    Surface3 = Me.GetSurface(2);
     Antenna = (IMyRadioAntenna)GridTerminalSystem.GetBlockWithName("Helicopter Antenna");
     Camera = (IMyCameraBlock)GridTerminalSystem.GetBlockWithName("FLIR Camera System (IRNV)");
     Camera.EnableRaycast = true;
@@ -63,14 +69,9 @@ public Program()
     Camera = (IMyCameraBlock)GridTerminalSystem.GetBlockWithName("FLIR Camera System (IRNV)");
     Camera.EnableRaycast = true;
 
-    //MissileLauncher1 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("Hydra Rocket Pod 2");
-    //MissileLauncher2 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("Hydra Rocket Pod 3");
-    //Bomb1 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("1000lb Bomb Mount");
-    //Bomb2 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("1000lb Bomb Mount 2");
-    //Missile1 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("AIM-54 Mount");
-    //Missile2 = (IMySmallMissileLauncher)GridTerminalSystem.GetBlockWithName("AIM-54 Mount 2");
-    //ChainGun = (IMySmallGatlingGun)GridTerminalSystem.GetBlockWithName("30mm Chain Gun");
+    ChainGun = (IMyConveyorSorter)GridTerminalSystem.GetBlockWithName("30mm Chain Gun");
 
+    LeftCockpit = (IMyMotorStator)GridTerminalSystem.GetBlockWithName("Left Cockpit Hinge");
     LeftDoor = (IMyMotorStator)GridTerminalSystem.GetBlockWithName("Left Door Hinge");
     RightDoor = (IMyMotorStator)GridTerminalSystem.GetBlockWithName("Right Door Hinge");
     FighterLCD = (IMyTextPanel)GridTerminalSystem.GetBlockWithName("Fighter HUD LCD");
@@ -79,6 +80,7 @@ public Program()
     GridTerminalSystem.GetBlocksOfType<IMyGasTank>(GasTankList);
     GridTerminalSystem.GetBlocksOfType<IMyMotorStator>(WheelHingeList, (w) => w.DisplayNameText.Contains("Wheel Rotor"));
     GridTerminalSystem.GetBlocksOfType<IMyThrust>(PropellerList, (p) => p.DisplayNameText.Contains("Propeller"));
+    GridTerminalSystem.GetBlocksOfType<IMyConveyorSorter>(DecoyList, (d) => d.DisplayNameText.Contains("Dispenser"));
 
     CenterScreen = new Vector2(Surface1.SurfaceSize.X / 2, Surface1.SurfaceSize.Y / 2);
     Instructor = false;
@@ -96,26 +98,42 @@ void Init()
     for (int i = 0; PilotCockpit == null; i++) { if (CockpitList[i].IsFunctional) PilotCockpit = CockpitList[i]; } // Поиск кокпита первого пилота
     for (int i = 0; CoPilotCockpit == null; i++) { if (CockpitList[i].IsFunctional && CockpitList[i] != PilotCockpit) CoPilotCockpit = CockpitList[i]; }
     List<IMyMotorStator> RotorList = new List<IMyMotorStator>(); // v--Поиск роторов пушки--v
-    GridTerminalSystem.GetBlocksOfType<IMyMotorStator>(RotorList, (r) => r.DisplayNameText.Contains("Chain Rotor"));
+    GridTerminalSystem.GetBlocksOfType<IMyMotorStator>(RotorList, (r) => r.DisplayNameText.Contains("Rotor (ChainGun)"));
     for (int i = 0; i < RotorList.Count; i++) if (RotorList[i].DisplayNameText.Contains("Elevation")) ChainElevation = RotorList[i]; else ChainAzimuth = RotorList[i]; // ^--Поиск роторов пушки--^
 
     if (Me.CustomData == string.Empty) SetDefaultSystemData(); // Установка параметров на стандартные значения
+
+    _hudPosition = FighterLCD.GetPosition();
+}
+
+void ReInit() {
+    GridTerminalSystem.GetBlocksOfType<IMyConveyorSorter>(AdditionalWeapon, (a) => a.Position.Y == 5 && a.Position.Z == -6);
 }
 
 void Main(string argument)
-{ 
+{
+    ReInit();
+    if (_triangleCounter == 360f) _triangleCounter = 0f;
+    else _triangleCounter++;
+
     if (argument == "SwitchInstructor") { Instructor = !Instructor; } // Переключение инструктора
     else if (argument == "SwitchHorizon") { Horizon = !Horizon; } // Переключение удержания горизонта
     else if (argument == "SwitchSpeedDumpeners") { SpeedDumpeners = !SpeedDumpeners; } // Переключение гасителя скорости
     else if (argument == "TargetLock") { TargetLocked = true; EnemyVector = CameraLock(); }
     else if (argument == "UnlockCamera") { TargetLocked = false; ResetAngles(); }
+
     
     if (!PilotCockpit.IsUnderControl)
     {
-        if (argument == "OpenLeftDoor") { LeftDoor.TargetVelocityRPM = 5f; }
-        else if (argument == "CloseLeftDoor") LeftDoor.TargetVelocityRPM = -5f;
-    } else LeftDoor.TargetVelocityRPM = -5f;
+        if (argument == "OpenLeftDoor") { LeftCockpit.TargetVelocityRPM = 5f; LeftDoor.TargetVelocityRPM = 10f; }
+        else if (argument == "CloseLeftDoor") { LeftCockpit.TargetVelocityRPM = -5f; LeftDoor.TargetVelocityRPM = -10f; }
+    }
+    else {
+        LeftCockpit.TargetVelocityRPM = -5f;
+        LeftDoor.TargetVelocityRPM = -10f;
+    }
 
+    SetDefaultAnglesToChainGun();
     DrawInfo();
     GetSystemData();
     DrawHUD();
@@ -149,8 +167,21 @@ void Main(string argument)
         //Co-Pilot
         CameraElevation.TargetVelocityRPM = -CoPilotCockpit.RotationIndicator.X * CAMERA_SENSIVITY;
         CameraAzimuth.TargetVelocityRPM = -CoPilotCockpit.RotationIndicator.Y * CAMERA_SENSIVITY;
+
+        ChainElevation.TargetVelocityRPM = CoPilotCockpit.RotationIndicator.X * CAMERA_SENSIVITY;
+        ChainAzimuth.TargetVelocityRPM = CoPilotCockpit.RotationIndicator.Y * CAMERA_SENSIVITY;
     }
     catch { Echo("Main() - Error"); }
+}
+
+void SetDefaultAnglesToChainGun()
+{
+    if (CoPilotCockpit.IsUnderControl) return;
+    else
+    {
+        ChainAzimuth.TargetVelocityRPM = (float)(0 - ChainAzimuth.Angle * 180 / Math.PI);
+        ChainElevation.TargetVelocityRPM = (float)(0 - ChainElevation.Angle * 180 / Math.PI);
+    }
 }
 
 void DrawInfo()
@@ -159,10 +190,11 @@ void DrawInfo()
     // состоянии вертолёта, а также некоторые важные данные.
 
     Surface1.ContentType = ContentType.NONE; Surface1.ContentType = ContentType.SCRIPT;
+    Surface3.ContentType = ContentType.NONE; Surface3.ContentType = ContentType.SCRIPT;
     
     using (MySpriteDrawFrame Frame = Surface1.DrawFrame())
     {
-        //v-----РАМКА-----v
+        //v----------------------------- РАМКА -----------------------------v
         MySprite Border = new MySprite(SpriteType.TEXTURE, "SquareSimple", CenterScreen, new Vector2(470f, 450f), Color.Green, "", TextAlignment.CENTER, 0f);
         Frame.Add(Border);
         Border = new MySprite(SpriteType.TEXTURE, "SquareSimple", CenterScreen, new Vector2(460f, 440f), Color.Black, "", TextAlignment.CENTER, 0f);
@@ -171,47 +203,54 @@ void DrawInfo()
         Frame.Add(TitleBackground);
         MySprite Title = new MySprite(SpriteType.TEXT, "Ка-52", new Vector2(CenterScreen.X, 20f), null, Color.Green, "Debug", TextAlignment.CENTER, 1f);
         Frame.Add(Title);
+        //^----------------------------- РАМКА -----------------------------^
 
-        //v-----ИМЯ-----v
+        //v----------------------------- ИМЯ -----------------------------v
         MySprite HelicopterName = new MySprite(SpriteType.TEXT, "Позывной:", new Vector2(40f, 60f), null, Color.Green, "Debug", TextAlignment.LEFT, 1f);
         Frame.Add(HelicopterName);
         HelicopterName = new MySprite(SpriteType.TEXT, GetAntennaData("Name"), new Vector2(470f, 60f), null, Color.Green, "Debug", TextAlignment.RIGHT, 1f);
         Frame.Add(HelicopterName);
+        //^----------------------------- ИМЯ -----------------------------^
         
-        //v-----ЧАСТОТА-----v
+        //v----------------------------- ЧАСТОТА -----------------------------v
         MySprite Frequency = new MySprite(SpriteType.TEXT, "Частота вещания:", new Vector2(40f, 90f), null, Color.Green, "Debug", TextAlignment.LEFT, 1f);
         Frame.Add(Frequency);
         Frequency = new MySprite(SpriteType.TEXT, GetAntennaData("Frequency"), new Vector2(470f, 90f), null, Color.Green, "Debug", TextAlignment.RIGHT, 1f);
         Frame.Add(Frequency);
+        //^----------------------------- ЧАСТОТА -----------------------------^
 
-        //v-----СПИДОМЕТР-----v
+        //v----------------------------- СПИДОМЕТР -----------------------------v
         string Speed = Math.Round(PilotCockpit.GetShipSpeed() * 3.6).ToString();
         MySprite Velocity = new MySprite(SpriteType.TEXT, "Скорость:", new Vector2(40f, 120f), null, Color.Green, "Debug", TextAlignment.LEFT, 1f);
         Frame.Add(Velocity);
         Velocity = new MySprite(SpriteType.TEXT, Speed + "км/ч", new Vector2(470f, 120f), null, Color.Green, "Debug", TextAlignment.RIGHT, 1f);
         Frame.Add(Velocity);
+        //^----------------------------- СПИДОМЕТР -----------------------------^
 
-        //v-----АЛЬТМЕТР-----v
+        //v----------------------------- АЛЬТМЕТР -----------------------------v
         MySprite Altitude = new MySprite(SpriteType.TEXT, "Высота:", new Vector2(40f, 150f), null, Color.Green, "Debug", TextAlignment.LEFT, 1f);
         Frame.Add(Altitude);
         Altitude = new MySprite(SpriteType.TEXT, GetAltitude().ToString() + "м", new Vector2(470f, 150f), null, Color.Green, "Debug", TextAlignment.RIGHT, 1f);
         Frame.Add(Altitude);
+        //^----------------------------- АЛЬТМЕТР -----------------------------^
 
-        //v-----ТОПЛИВО-----v
+        //v----------------------------- ТОПЛИВО -----------------------------v
         MySprite Hydrogen = new MySprite(SpriteType.TEXT, "Топливо:", new Vector2(40f, 180f), null, Color.Green, "Debug", TextAlignment.LEFT, 1f);
         Frame.Add(Hydrogen);
         Hydrogen = new MySprite(SpriteType.TEXT, Math.Round(GetFuelPrecentage(), 1) + "%", new Vector2(470f, 180f), null, Color.Green, "Debug", TextAlignment.RIGHT, 1f);
         Frame.Add(Hydrogen);
+        //^----------------------------- ТОПЛИВО -----------------------------^
 
-        //v-----ИНСТРУКТОР-----v
+        //v----------------------------- ИНСТРУКТОР -----------------------------v
         MySprite InstructorSprite = new MySprite(SpriteType.TEXT, "Инструктор:", new Vector2(40f, 210f), null, Color.Green, "Debug", TextAlignment.LEFT, 1f);
         Frame.Add(InstructorSprite);
         Color InstructorColor = Color.Maroon;
         string InstructorStatus; if (Instructor) { InstructorStatus = "Вкл."; InstructorColor = Color.Green; } else InstructorStatus = "Выкл.";
         InstructorSprite = new MySprite(SpriteType.TEXT, InstructorStatus, new Vector2(470f, 210f), null, InstructorColor, "Debug", TextAlignment.RIGHT, 1f);
         Frame.Add(InstructorSprite);
+        //^----------------------------- ИНСТРУКТОР -----------------------------^
 
-        //v-----ИНДИКАЦИЯ ПОВРЕЖДЕНИЙ-----v
+        //v------------------------- ИНДИКАЦИЯ ПОВРЕЖДЕНИЙ -------------------------v
         MySprite Helicopter = new MySprite(SpriteType.TEXTURE, "Triangle", new Vector2(CenterScreen.X - 30, 350f), new Vector2(45f, 75f), Color.Green, "", TextAlignment.CENTER, 0f);
         Frame.Add(Helicopter);
         Helicopter = new MySprite(SpriteType.TEXTURE, "Triangle", new Vector2(CenterScreen.X + 30, 350f), new Vector2(45f, 75f), Color.Green, "", TextAlignment.CENTER, 0f);
@@ -233,13 +272,14 @@ void DrawInfo()
         Helicopter = new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(CenterScreen.X, 310f), new Vector2(7.5f, 45f), Color.Green, "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
         Frame.Add(Helicopter);
 
-        //v-----Винты-----v
+        //v------------------------------- Винты -----------------------------v
         Helicopter = new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(CenterScreen.X, 285f), new Vector2(300f, 5f), GetBlockEnabled(PropellerUp), "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
         Frame.Add(Helicopter);
         Helicopter = new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(CenterScreen.X, 300f), new Vector2(300f, 5f), GetBlockEnabled(PropellerLow), "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
         Frame.Add(Helicopter);
+        //^------------------------------- Винты -----------------------------^
 
-        //v-----Двигатели-----v
+        //v----------------------------  Двигатели  -----------------------------v
         Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X - 35, 330f), new Vector2(30f, 30f), Color.Black, "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
         Frame.Add(Helicopter);
         Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X - 35, 330f), new Vector2(24f, 24f), GetBlockEnabled(LeftEngine), "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
@@ -248,46 +288,29 @@ void DrawInfo()
         Frame.Add(Helicopter);
         Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X + 35, 330f), new Vector2(24f, 24f), GetBlockEnabled(RightEngine), "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
         Frame.Add(Helicopter);
+        //^----------------------------  Двигатели  -----------------------------^
 
-        //v-----Подвесное вооружение-----v
-        /*Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X - 60, 405f), new Vector2(20f, 20f), GetBlockEnabled(Missile1), "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
-        Frame.Add(Helicopter);
-        Helicopter = new MySprite(SpriteType.TEXT, GetInventoryCount(Missile1).ToString(), new Vector2((float)(CenterScreen.X - 62.5), 415f), null, GetBlockEnabled(Missile1), "Debug", TextAlignment.CENTER, 0.675f);
-        Frame.Add(Helicopter);
+        //v---------------------------- Вооружение -----------------------------v
+        foreach (IMyConveyorSorter Object_Weapon in AdditionalWeapon) {
+            float temp = (Object_Weapon.Position.X < 0) ? 0 : 4;
+            float offsetX = Object_Weapon.Position.X - temp;
 
-        Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X + 60, 405f), new Vector2(20f, 20f), GetBlockEnabled(Missile2), "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
-        Frame.Add(Helicopter);
-        Helicopter = new MySprite(SpriteType.TEXT, GetInventoryCount(Missile2).ToString(), new Vector2((float)(CenterScreen.X + 62.5), 415f), null,GetBlockEnabled(Missile2), "Debug", TextAlignment.CENTER, 0.675f);
-        Frame.Add(Helicopter);
+            Vector2 Position = new Vector2((CenterScreen.X + offsetX * -25f), 405f);
 
-        Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X - 80, 405f), new Vector2(20f, 20f), GetBlockEnabled(Bomb1), "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
-        Frame.Add(Helicopter);
-        Helicopter = new MySprite(SpriteType.TEXT, GetInventoryCount(Bomb1).ToString(), new Vector2((float)(CenterScreen.X - 82.5), 415f), null, GetBlockEnabled(Bomb1), "Debug", TextAlignment.CENTER, 0.675f);
-        Frame.Add(Helicopter);
+            MySprite Weapon = new MySprite(SpriteType.TEXTURE, "Circle", Position, new Vector2(20f, 20f), GetBlockEnabled(Object_Weapon), "", TextAlignment.CENTER, 0f);
+            Frame.Add(Weapon);
+            Weapon = new MySprite(SpriteType.TEXT, GetInventoryCount(Object_Weapon).ToString(), new Vector2(Position.X, 415f), null, GetBlockEnabled(Object_Weapon), "Debug", TextAlignment.CENTER, 0.675f);
+            Frame.Add(Weapon);
+        }
 
-        Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X + 80, 405f), new Vector2(20f, 20f), GetBlockEnabled(Bomb2), "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
-        Frame.Add(Helicopter);
-        Helicopter = new MySprite(SpriteType.TEXT, GetInventoryCount(Bomb2).ToString(), new Vector2((float)(CenterScreen.X + 82.5), 415f), null, GetBlockEnabled(Bomb2), "Debug", TextAlignment.CENTER, 0.675f);
-        Frame.Add(Helicopter);
-
-        Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X - 100, 405f), new Vector2(20f, 20f), GetBlockEnabled(MissileLauncher1), "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
-        Frame.Add(Helicopter);
-        Helicopter = new MySprite(SpriteType.TEXT, GetInventoryCount(MissileLauncher1).ToString(), new Vector2((float)(CenterScreen.X - 102.5), 415f), null, GetBlockEnabled(MissileLauncher1), "Debug", TextAlignment.CENTER, 0.675f);
-        Frame.Add(Helicopter);
-
-        Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X + 100, 405f), new Vector2(20f, 20f), GetBlockEnabled(MissileLauncher2), "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
-        Frame.Add(Helicopter);
-        Helicopter = new MySprite(SpriteType.TEXT, GetInventoryCount(MissileLauncher2).ToString(), new Vector2((float)(CenterScreen.X + 102.5), 415f), null, GetBlockEnabled(MissileLauncher2), "Debug", TextAlignment.CENTER, 0.675f);
-        Frame.Add(Helicopter);
-
-        Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X + 35, 425f), new Vector2(25f, 40f), Color.Black, "", TextAlignment.CENTER, 0f);
-        Frame.Add(Helicopter);
-        Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X + 30, 420f), new Vector2(10f, 10f), GetBlockEnabled(ChainGun), "", TextAlignment.CENTER, 0f);
-        Frame.Add(Helicopter);
         Helicopter = new MySprite(SpriteType.TEXT, GetInventoryCount(ChainGun).ToString(), new Vector2(CenterScreen.X, 410f), null, Color.Black, "Debug", TextAlignment.CENTER, 0.7f);
-        Frame.Add(Helicopter);*/
+        Frame.Add(Helicopter);
 
-        //v-----Шасси-----v
+        Helicopter = new MySprite(SpriteType.TEXT, $"ЛТЦ: {GetInventoryRangeCount(DecoyList).ToString()}", new Vector2(40f, 445f), null, Color.Green, "Debug", TextAlignment.LEFT, 0.8f);
+        Frame.Add(Helicopter);
+        //^--------------------------- Вооружение ---------------------------^
+
+        //v----------------------------- Шасси -----------------------------v
         if (WheelHingeList[0].TargetVelocityRPM > 0)
         {
             Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X, 450f), new Vector2(10f, 30f), GetBlockEnabled("Forward Wheel Rotor"), "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
@@ -297,7 +320,14 @@ void DrawInfo()
             Helicopter = new MySprite(SpriteType.TEXTURE, "Circle", new Vector2(CenterScreen.X + 30, 445f), new Vector2(10f, 25f), GetBlockEnabled("Right Wheel Rotor"), "", TextAlignment.CENTER, (float)(180 * Math.PI / 180));
             Frame.Add(Helicopter);
         }
-    }   
+        //^----------------------------- Шасси -----------------------------^
+        //^---------------------- ИНДИКАЦИЯ ПОВРЕЖДЕНИЙ ----------------------^
+    }
+
+    using (MySpriteDrawFrame Frame = Surface3.DrawFrame()) {
+        MySprite Info = new MySprite(SpriteType.TEXT, $"Масса: {Math.Round(PilotCockpit.CalculateShipMass().TotalMass)} кг", new Vector2(60f, 60f), null, Color.Green, "Debug", TextAlignment.LEFT, 1.75f);
+        Frame.Add(Info);
+    }
 }
 
 void SetHorizon()
@@ -432,6 +462,20 @@ MyFixedPoint GetInventoryCount(IMyTerminalBlock Block)
     return 0;
 }
 
+MyFixedPoint GetInventoryRangeCount(List<IMyConveyorSorter> List) {
+    MyFixedPoint ResultCount = 0;
+
+    foreach (IMyConveyorSorter Object_Block in List) {
+        IMyInventory Inventory = Object_Block.GetInventory(0);
+        List<MyInventoryItem> ItemList = new List<MyInventoryItem>();
+        Inventory.GetItems(ItemList);
+        MyFixedPoint ItemCount = 0;
+        foreach (MyInventoryItem Object_Item in ItemList) ItemCount += Object_Item.Amount;
+        ResultCount += ItemCount;
+    }
+    return ResultCount;
+}
+
 MySprite DrawLine(Vector2 Point1, Vector2 Point2, float Width, Color Color) // Отрисовка линии
 {
     // Метод возвращает спрайт, который из себя представляет линию.
@@ -527,8 +571,25 @@ void DrawHUD()
     FighterLCD.ContentType = ContentType.NONE;
     FighterLCD.ContentType = ContentType.SCRIPT;
     FighterLCD.ScriptBackgroundColor = Color.Black;
+
+    float _xPos = 0f;
+    float _yPos = 0f;
+
     using (MySpriteDrawFrame Frame = FighterLCD.DrawFrame())
     {
+        if (_targetPosition != new Vector3D())
+        {
+            Vector3D _tempVector = Vector3.Normalize(_targetPosition - FighterLCD.GetPosition());
+
+            float _tempDistance = (float)(_targetPosition - FighterLCD.GetPosition()).Length();
+
+            float azimuth = (float)Math.Atan2(Vector3D.Dot(_tempVector, FighterLCD.WorldMatrix.Right), Vector3D.Dot(_tempVector, FighterLCD.WorldMatrix.Forward));
+            float elevation = (float)Math.Asin(Vector3D.Dot(_tempVector, FighterLCD.WorldMatrix.Up));
+
+            _xPos = 256f + (float)GetAngleBetweenVectors(FighterLCD.WorldMatrix.Forward, FighterLCD.WorldMatrix.Right, _tempVector) * 27f;
+            _yPos = 256f + (float)GetAngleBetweenVectors(FighterLCD.WorldMatrix.Forward, FighterLCD.WorldMatrix.Up, _tempVector) * -37;
+        }
+
         Frame.Add(DrawLine(new Vector2(140f, 276f), new Vector2(372f, 276f), 2f, Color.Green, 0f));
         Frame.Add(DrawLine(new Vector2(140f, 276f), new Vector2(372f, 276f), 2f, Color.Green, 0.5236f));
         Frame.Add(DrawLine(new Vector2(140f, 276f), new Vector2(372f, 276f), 2f, Color.Green, -0.5236f));
@@ -569,12 +630,15 @@ void DrawHUD()
         Frame.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(60f, 0f), new Vector2(200f, 217.5f), Color.Black, "", TextAlignment.CENTER, 0f));
         Frame.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(60f, 512f), new Vector2(200f, 217.5f), Color.Black, "", TextAlignment.CENTER, 0f));
 
-        Frame.Add(new MySprite(SpriteType.TEXT, Math.Round(-GetPitch() * 180 / Math.PI).ToString(), new Vector2(256f, 450f), null, Color.Green, "Debug", TextAlignment.CENTER, 1.5f));
-
         Frame.Add(DrawLine(new Vector2(100f, 30f), new Vector2(412f, 30f), 1f, Color.Green));
 
         int Azimuth = (int)(180 + Math.Round(GetAzimuth() * 180 / Math.PI));
-        Frame.Add(new MySprite(SpriteType.TEXT, Azimuth.ToString(), new Vector2(256f, 410f), null, Color.Green, "Debug", TextAlignment.CENTER, 1.5f));
+
+        if (_targetPosition != new Vector3D())
+        {
+            Frame.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(_xPos, _yPos), new Vector2(50f, 50f), Color.Red, "", TextAlignment.CENTER, (float)(_triangleCounter * Math.PI / 360)));
+            Frame.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(_xPos, _yPos), new Vector2(48f, 48f), Color.Black, "", TextAlignment.CENTER, (float)(_triangleCounter * Math.PI / 360)));
+        }
     }
 }
 

@@ -1,4 +1,5 @@
 //Ка-52 - Система посадки и контекстное меню
+// Правки 01.11.2024
 /*ToDo:
 1. GPS
 2. Расширенное управление инструктором
@@ -10,7 +11,7 @@ IMyRadioAntenna Antenna;
 
 Vector2 CenterScreen;
 LandingArea CurrentLandingArea;
-ContextMenu PrevMenu, CurrentMenu, Control, InstructorMenu, GPSMenu, GPSListMenu;
+ContextMenu PrevMenu, CurrentMenu, Control, InstructorMenu, GPSMenu, GPSListMenu, GPSControlMenu;
 int Counter = 0;
 bool IsLandingChassis = true;
 bool IsStels = false;
@@ -36,6 +37,7 @@ public Program()
     CreateControlScreen();
     //CreateInstructorScreen();
     CreateGPSScreen();
+    CreateGPSListScreen();
 
     CurrentMenu = Control;
 }
@@ -50,6 +52,7 @@ void Init()
     ContextMenuList.Add(Control);
     ContextMenuList.Add(InstructorMenu);
     ContextMenuList.Add(GPSMenu);
+    ContextMenuList.Add(GPSListMenu);
 }
 
 void Main(string argument)
@@ -58,8 +61,6 @@ void Main(string argument)
     ShowMenu(CurrentMenu);
     GetMessage();
     if (Counter <= 60) Counter++; else Counter = 0;
-
-    foreach(LandingArea Object_Area in LandingAreaList) if (GetDistance(Object_Area) < 250) CurrentLandingArea = Object_Area;
 
     if (argument == "ContextMenuUpDown_Up") CurrentMenu.SwitchUp();
     else if (argument == "ContextMenuUpDown_Down") CurrentMenu.SwitchDown();
@@ -105,7 +106,7 @@ void DrawLandingSystem()
                     Frame.Add(CenterMarker);
                 }
             }
-            else if (GetDistance(CurrentLandingArea.LandingVector) >= 50 && GetDistance(CurrentLandingArea.LandingVector) < 250)// Точка находится на промеждутке от 50 до 250 метров
+            else if (GetDistance(CurrentLandingArea.LandingVector) >= 50 && GetDistance(CurrentLandingArea.LandingVector) < 12000)// Точка находится на промеждутке от 50 до 250 метров
             {
                 MySprite Border = new MySprite(SpriteType.TEXTURE, "SquareSimple", CenterScreen, new Vector2(450f, 450f), Color.Green, "", TextAlignment.CENTER, 0f);
                 Frame.Add(Border);
@@ -125,6 +126,10 @@ void DrawLandingSystem()
 
                 MySprite LandingAreaName = new MySprite(SpriteType.TEXT, CurrentLandingArea.AreaName, new Vector2(CenterScreen.X, 80f), null, Color.Green, "Debug", TextAlignment.CENTER, 1.5f);
                 Frame.Add(LandingAreaName);
+
+                string str_distance = $"Расстояние:\n{Math.Round(GetDistance(CurrentLandingArea.LandingVector)).ToString()}м.";
+                MySprite Distance = new MySprite(SpriteType.TEXT, str_distance, new Vector2(CenterScreen.X, 375f), null, Color.Green, "Debug", TextAlignment.CENTER, 1.25f);
+                Frame.Add(Distance);
             }
         }
         else
@@ -200,62 +205,108 @@ void ButtonClick(Button Object_Button)
     // Метод принимает кнопку в качестве объекта, и иммитирует нажание на неё.
 
     string Tag = Object_Button.Tag;
-    switch (Tag)
+    
+    if (Tag.Contains("X:") && Tag.Contains(" Y:") && Tag.Contains(" Z:")) // Проверяем, является ли тег координатами
     {
-        case "Back":
-            CurrentMenu = PrevMenu;
-            PrevMenu = null;
-            break;
-
-        case "LandingGears":
-            List<IMyMotorStator> LandingGearList = new List<IMyMotorStator>();
-            GridTerminalSystem.GetBlocksOfType<IMyMotorStator>(LandingGearList, (l) => l.DisplayNameText.Contains("Wheel Rotor"));
-            foreach (IMyMotorStator Object_Rotor in LandingGearList) Object_Rotor.ApplyAction("Reverse");
-            if (LandingGearList[0].TargetVelocityRPM < 0) {IsLandingChassis = false; }
-            else { IsLandingChassis = true; }
-            
-            List<IMyInteriorLight> LandingLightList = new List<IMyInteriorLight>();
-            GridTerminalSystem.GetBlocksOfType<IMyInteriorLight>(LandingLightList, (l) => l.DisplayNameText.Contains("Landing Light"));
-            if (IsStels) foreach (IMyInteriorLight Object_Light in LandingLightList) Object_Light.Enabled = IsLandingChassis;
-            else foreach (IMyInteriorLight Object_Light in LandingLightList) Object_Light.Enabled = false;
-            break;
-
-        case "Stels":
-            Stels(!IsStels);
-            break;
-
-        case "InstructorMenu":
-            CreateInstructorScreen();
-            CurrentMenu = InstructorMenu;
-            PrevMenu = Control;
-            break;
-
-        case "GPSMenu":
-            CurrentMenu = GPSMenu;
-            PrevMenu = Control;
-            break;
-
-        case "Instructor":
-            ChangeParam("Instructor");
-            break;
-        
-        case "Horizon":
-            ChangeParam("Horizon");
-            break;
-        
-        case "SpeedDumpeners":
-            ChangeParam("SpeedDumpeners");
-            break;
-
-        case "AimAssist":
-            ChangeParam("Помощь прицеливания");
-            break;
-
-        case "CreateNewLandingArea":
-            GPSList.Add(new LandingArea("Новая точка", Cockpit.GetPosition()));
-            break;
+        // Данные приходят сюда в формате 'X:coordX Y:coordY Z:coordZ'
+        string[] splittedData = Tag.Split(' ');
+        LandingArea area = new LandingArea(Object_Button.Text, new Vector3D(Convert.ToSingle(splittedData[0].Split(':')[1]),
+                                                                            Convert.ToSingle(splittedData[1].Split(':')[1]),
+                                                                            Convert.ToSingle(splittedData[2].Split(':')[1])));
+        CreateGPSPointControl(area);
+        CurrentMenu = GPSControlMenu;
+        PrevMenu = GPSListMenu;
     }
-    for (int i = 1; i < CurrentMenu.ButtonList.Count; i++) try { CurrentMenu.ChangeButtonColor(CurrentMenu.ButtonList[i].Tag, GetParam(CurrentMenu.ButtonList[i].Tag)); } catch {}
+    else if (Tag.Contains("GoToGPS:"))
+    {
+        string pointName = Tag.Split(':')[1];
+        foreach (LandingArea object_area in GPSList) if (object_area.AreaName == pointName) CurrentLandingArea = object_area;
+    }
+    else if (Tag.Contains("DeleteGPS:"))
+    {
+        string pointName = Tag.Split(':')[1];
+        string newData = string.Empty;
+        string[] cockpitData = Cockpit.CustomData.Split('\n');
+        for (int i = 0; i < cockpitData.Length; i++)
+            if (cockpitData[i].Split(':')[0] != pointName)
+            {
+                if (newData == string.Empty) newData += cockpitData[i];
+                else newData += $"\n{cockpitData[i]}";
+            } else continue;
+            
+        Cockpit.CustomData = newData;
+        UpdateGPSPointList();
+        CurrentMenu = GPSListMenu;
+        PrevMenu = GPSMenu;
+    }
+    else
+    {
+        switch (Tag)
+        {
+            case "Back":
+                CurrentMenu = PrevMenu;
+                PrevMenu = Control;
+                break;
+
+            case "LandingGears":
+                List<IMyMotorStator> LandingGearList = new List<IMyMotorStator>();
+                GridTerminalSystem.GetBlocksOfType<IMyMotorStator>(LandingGearList, (l) => l.DisplayNameText.Contains("Wheel Rotor"));
+                foreach (IMyMotorStator Object_Rotor in LandingGearList) Object_Rotor.ApplyAction("Reverse");
+                if (LandingGearList[0].TargetVelocityRPM < 0) {IsLandingChassis = false; }
+                else { IsLandingChassis = true; }
+                
+                List<IMyInteriorLight> LandingLightList = new List<IMyInteriorLight>();
+                GridTerminalSystem.GetBlocksOfType<IMyInteriorLight>(LandingLightList, (l) => l.DisplayNameText.Contains("Landing Light"));
+                if (IsStels) foreach (IMyInteriorLight Object_Light in LandingLightList) Object_Light.Enabled = IsLandingChassis;
+                else foreach (IMyInteriorLight Object_Light in LandingLightList) Object_Light.Enabled = false;
+                break;
+
+            case "Stels":
+                Stels(!IsStels);
+                break;
+
+            case "InstructorMenu":
+                CreateInstructorScreen();
+                CurrentMenu = InstructorMenu;
+                PrevMenu = Control;
+                break;
+
+            case "GPSMenu":
+                CurrentMenu = GPSMenu;
+                PrevMenu = Control;
+                break;
+
+            case "Instructor":
+            case "Horizon":
+            case "SpeedDumpeners":
+                ChangeParam(Tag);
+                break;
+
+            case "AimAssist":
+                ChangeParam("Помощь прицеливания");
+                break;
+
+            case "CreateNewLandingArea":
+                if (GPSList.Count >= 8) break;
+                int newPointCounter = GPSList.Count(point => point.AreaName.Contains("Новая точка"));
+                string pointName = newPointCounter > 0 ? $"Новая точка ({newPointCounter})" : "Новая точка";
+                Vector3D myPos = Cockpit.GetPosition();
+                if (GPSList.Count == 0) Cockpit.CustomData += $"{pointName}:{myPos.X}:{myPos.Y}:{myPos.Z}";
+                else Cockpit.CustomData += $"\n{pointName}:{myPos.X}:{myPos.Y}:{myPos.Z}";
+                GPSList.Add(new LandingArea(pointName, myPos));
+                break;
+            
+            case "StaticLandingAreaList":
+                UpdateGPSPointList();
+                CurrentMenu = GPSListMenu;
+                PrevMenu = GPSMenu;
+                break;
+            
+            case "GPSOff":
+                CurrentLandingArea = null;
+                break;
+        }
+    }
 }
 
 void ShowMenu(ContextMenu Menu)
@@ -313,6 +364,7 @@ void CreateGPSScreen()
     GPSMenu.CreateButton("< Назад", "Back");
     GPSMenu.CreateButton("Список точек", "StaticLandingAreaList");
     GPSMenu.CreateButton("Добавить точку", "CreateNewLandingArea");
+    GPSMenu.CreateButton("Отключить GPS", "GPSOff");
 }
 
 void CreateGPSListScreen()
@@ -321,8 +373,48 @@ void CreateGPSListScreen()
 
     GPSListMenu = new ContextMenu("Список точек");
     GPSListMenu.CreateButton("< Назад", "Back");
-    foreach (LandingArea GPSPoint in GPSList)
-        GPSListMenu.CreateGPSButton(GPSPoint.AreaName, GPSPoint.LandingVector);
+    UpdateGPSPointList();
+}
+
+void UpdateGPSPointList()
+{
+    // Обновление существующих GPS-точек
+
+    if (Cockpit.CustomData != string.Empty)
+    {
+        GPSList.Clear();
+
+        string[] CurrentGPSPoints = Cockpit.CustomData.Split('\n');
+        
+        foreach (string data_point in CurrentGPSPoints)
+        {
+            string[] splittedData = data_point.Split(':');
+            LandingArea area = new LandingArea(splittedData[0], new Vector3D(Convert.ToSingle(splittedData[1]),
+                                                                            Convert.ToSingle(splittedData[2]),
+                                                                            Convert.ToSingle(splittedData[3])));
+            GPSList.Add(area);
+        }
+
+        GPSListMenu.DeleteButtons();
+        GPSListMenu.CreateButton("< Назад", "Back");
+        foreach (LandingArea GPSPoint in GPSList)
+            GPSListMenu.CreateGPSButton(GPSPoint.AreaName, GPSPoint.LandingVector);
+    }
+    else
+    {
+        GPSListMenu.DeleteButtons();
+        GPSListMenu.CreateButton("< Назад", "Back");
+    }
+}
+
+void CreateGPSPointControl(LandingArea Point)
+{
+    // Управление GPS-точками
+
+    GPSControlMenu = new ContextMenu("Упр. точкой");
+    GPSControlMenu.CreateButton("< Назад", "Back");
+    GPSControlMenu.CreateButton("Построить маршрут", $"GoToGPS:{Point.AreaName}");
+    GPSControlMenu.CreateButton("Удалить точку", $"DeleteGPS:{Point.AreaName}");
 }
 
 void Stels(bool StelsEnabled)
@@ -512,6 +604,12 @@ class ContextMenu
     public void ChangeButtonColor(string _tag, Color _color) // Смена цвета кнопки
     {
         foreach (Button Object_Button in ButtonList) if (Object_Button.Tag == _tag) Object_Button.ButtonColor = _color;
+    }
+
+    public void DeleteButtons()
+    {
+        SelectedButtonID = 0;
+        ButtonList.Clear();
     }
 }
 
