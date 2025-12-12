@@ -3,25 +3,32 @@ ToDo List:
 [ ] Реализация редактора 3D-объектов
     [+] Переход курсора с одного экрана на другой
     [+] Событие наведения на ребро
-    [ ] Событие нажатия на вершину и ребро
+    [+] Событие нажатия на вершину и ребро
     [ ] Добавление окон для выбора параметров на экран Debug (X, Y, Z, размер, цвет)
+        [+] Кординаты
+        [ ] Размер
+        [ ] Цвет
     [ ] Добавление кнопок
         [ ] Добавление новой вершины
         [ ] Добавление нового ребра
-        [ ] Удаление выбранной вершины
-        [ ] Удаление выбранного ребра
-    [ ] Создание отдельных объектов
+    [+] Удаление выбранной вершины
+    [+] Удаление выбранного ребра
     [ ] Изменение формата хранимых данных
+    [ ] Создание отдельных объектов
 
 [ ] Построение 3D-модели вертолёта
 */
 
+// Остановка: пофикстить назначение ID вершине при её создании
+
 IMyTextPanel _lcd, _lcdDebug;
 IMyCockpit _cockpit;
+IMyShipWelder _welder;
 
 List<Vertex> _vertexList = new List<Vertex>();
 List<Edge> _edgeList = new List<Edge>();
 List<Edge> _hoveredEdgeList = new List<Edge>();
+List<Button> buttonList = new List<Button>();
 
 MySprite _debugSprite = new MySprite();
 
@@ -30,11 +37,19 @@ float _verticalAngle = 0f;
 float _distance = 30f;
 const float _width = 10f;
 string _cursorVertex = string.Empty;
+bool _clickFlag = false;
+int edgeModifyVertexID = -1;
+bool edgeAttachToCursor = false; // Новый флаг для привязки к курсору
+
+Vector3 newVertexPosition = new Vector3(0f, 0f, 0f);
 
 Vector2 _cursorPosition = new Vector2(256f, 256f);
 Vector2 _cursorDebugPosition = new Vector2(256f, 768f);
 
 Cursor _cursor, _cursorDebug;
+Vertex selectedVertex = null;
+Vertex cursorVertex = new Vertex(new Vector3(0, 0, 0), 10, Color.Yellow, -999);
+Edge selectedEdge = null;
 
 public Program()
 {
@@ -54,10 +69,31 @@ void Init()
         _lcd = (IMyTextPanel)GridTerminalSystem.GetBlockWithName("Text Panel");
         _lcdDebug = (IMyTextPanel)GridTerminalSystem.GetBlockWithName("Debug Text Panel");
         _cockpit = (IMyCockpit)GridTerminalSystem.GetBlockWithName("Control Seat");
+        _welder = (IMyShipWelder)GridTerminalSystem.GetBlockWithName("Welder");
     } catch { Echo("Init Error"); }
 
     SaveVertex();
     if (_edgeList.Count != 0) SaveEdge();
+
+    buttonList.Add(new Button(buttonList.Count, "Добавить вершину", Color.Green, new Vector2(125f, 25f))); // ID: 0
+    buttonList.Add(new Button(buttonList.Count, "Добавить ребро", Color.Green, new Vector2(350f, 25f))); // ID: 1
+    buttonList.Add(new Button(buttonList.Count, "<", Color.White, Color.Blue, new Vector2(196f, 150f))); // ID: 2
+    buttonList.Add(new Button(buttonList.Count, "<<", Color.White, Color.Blue, new Vector2(136f, 150f))); // ID: 3
+    buttonList.Add(new Button(buttonList.Count, ">", Color.White, Color.Blue, new Vector2(316f, 150f))); // ID: 4
+    buttonList.Add(new Button(buttonList.Count, ">>", Color.White, Color.Blue, new Vector2(376f, 150f))); // ID: 5
+    
+    buttonList.Add(new Button(buttonList.Count, "<", Color.White, Color.Blue, new Vector2(196f, 200f))); // ID: 6
+    buttonList.Add(new Button(buttonList.Count, "<<", Color.White, Color.Blue, new Vector2(136f, 200f))); // ID: 7
+    buttonList.Add(new Button(buttonList.Count, ">", Color.White, Color.Blue, new Vector2(316f, 200f))); // ID: 8
+    buttonList.Add(new Button(buttonList.Count, ">>", Color.White, Color.Blue, new Vector2(376f, 200f))); // ID: 9
+    
+    buttonList.Add(new Button(buttonList.Count, "<", Color.White, Color.Blue, new Vector2(196f, 250f))); // ID: 10
+    buttonList.Add(new Button(buttonList.Count, "<<", Color.White, Color.Blue, new Vector2(136f, 250f))); // ID: 11
+    buttonList.Add(new Button(buttonList.Count, ">", Color.White, Color.Blue, new Vector2(316f, 250f))); // ID: 12
+    buttonList.Add(new Button(buttonList.Count, ">>", Color.White, Color.Blue, new Vector2(376f, 250f))); // ID: 13
+    
+    buttonList.Add(new Button(buttonList.Count, "", Color.White, Color.Blue, new Vector2(230f, 115f))); // ID: 14
+    buttonList.Add(new Button(buttonList.Count, "", Color.White, Color.Blue, new Vector2(230f, 165f))); // ID: 15
 }
 
 void Main(string argument)
@@ -80,6 +116,38 @@ void Main(string argument)
     else if (argument == "cmd:SaveEdge") SaveEdge();
     else if (argument == "cmd:LoadEdge") _edgeList = LoadEdge();
 
+    if (_welder.IsActivated)
+    {
+        _clickFlag = true;
+    }
+    else
+    {
+        if (_clickFlag)
+        {
+            OnClick();
+            _clickFlag = false;
+        }
+    }
+
+    if (_cockpit.RollIndicator < 0f)
+    {
+        if (selectedEdge != null)
+        {
+            _edgeList.Remove(selectedEdge);
+            selectedEdge = null;
+            edgeAttachToCursor = false;
+        }
+        else if (selectedVertex != null)
+        {
+            for (int i = _edgeList.Count - 1; i >= 0; i--)
+            {
+                if (_edgeList[i]._vertex1 == selectedVertex || _edgeList[i]._vertex2 == selectedVertex) _edgeList.Remove(_edgeList[i]);
+            }
+            _vertexList.Remove(selectedVertex);
+            selectedVertex = null;
+        }
+    }
+
     foreach (Vertex _vertex in _vertexList) _vertex.Update2DPosition(_angle, _verticalAngle, _distance);
 
     _angle += -_cockpit.MoveIndicator.X * 0.01f;
@@ -93,21 +161,33 @@ void Main(string argument)
         _cursorDebug.MoveCursor(_cockpit.RotationIndicator);
     }
 
+    // Обновляем позицию курсорной вершины для режима привязки
+    if (edgeAttachToCursor)
+    {
+        // Преобразуем экранные координаты курсора в 3D позицию для отображения
+        // Это упрощенное преобразование - в реальности нужно обратное проецирование
+        cursorVertex.UpdatePosition(_cursor.GetPosition());
+        
+        if (edgeAttachToCursor)
+        {
+            cursorVertex.UpdatePosition(_cursor.GetPosition());
+        }
+    }
+
     // v------------------------ Hover Logic ------------------------v
 
     foreach (Vertex _vertex in _vertexList)
     {
-        Vector2 _currentVertexPosition = new Vector2(260f + _vertex.GetPosition().X * _width, 260f + _vertex.GetPosition().Y * _width);
-        Vector2 _tempVectorMin = _currentVertexPosition - _vertex.GetSize() / 2;
-        Vector2 _tempVectorMax = _currentVertexPosition + _vertex.GetSize() / 2;
-
-        if (_cursor.GetPosition().X >= _tempVectorMin.X && _cursor.GetPosition().X <= _tempVectorMax.X &&
-            _cursor.GetPosition().Y >= _tempVectorMin.Y && _cursor.GetPosition().Y <= _tempVectorMax.Y && _cursorVertex == string.Empty)
+        if (selectedVertex != _vertex && CheckVertexHover(_vertex))
         {
             _vertex.ChangeColor(_vertex.GetFocusColor());
             _cursorVertex = $"Вершина (ID: {_vertex.GetID().ToString()})";
         }
-        else _vertex.ChangeColor(_vertex.GetDefaultColor());
+        else
+        {
+            if (selectedVertex != _vertex) _vertex.ChangeColor(_vertex.GetDefaultColor());
+            else _vertex.ChangeColor(Color.Orange);
+        }
     }
 
     // Проверяем рёбра только если не наведены на вершину
@@ -121,11 +201,8 @@ void Main(string argument)
         {
             if (_edge.IsEdgeUnderCursor(_cursor.GetPosition()))
             {
-                // Вычисляем "очки" для ребра:
-                // 1. Чем ближе к курсору - тем лучше
-                // 2. Чем ближе к камере (меньше Z) - тем лучше
                 float distanceScore = 1000f / (_edge.GetDistanceToCursor(_cursor.GetPosition()) + 0.1f);
-                float zScore = -_edge.GetAverageZ() * 50f; // Меньший Z дает лучший результат
+                float zScore = -_edge.GetAverageZ() * 50f;
                 
                 float totalScore = distanceScore + zScore;
                 
@@ -140,14 +217,21 @@ void Main(string argument)
         // Подсвечиваем только лучшее ребро
         foreach (Edge _edge in _edgeList)
         {
-            if (_edge == bestEdge)
+            if (selectedEdge != _edge)
             {
-                _edge.ChangeColor(_edge.GetFocusColor());
-                _cursorVertex = $"Ребро ({_edge.GetParam()})";
+                if (_edge == bestEdge)
+                {
+                    _edge.ChangeColor(_edge.GetFocusColor());
+                    _cursorVertex = $"Ребро ({_edge.GetParam()})";
+                }
+                else
+                {
+                    _edge.ChangeColor(_edge.GetDefaultColor());
+                }
             }
             else
             {
-                _edge.ChangeColor(_edge.GetDefaultColor());
+                _edge.ChangeColor(Color.Orange);
             }
         }
     }
@@ -156,7 +240,30 @@ void Main(string argument)
         // Если наведены на вершину, возвращаем рёбрам стандартный цвет
         foreach (Edge _edge in _edgeList)
         {
-            _edge.ChangeColor(_edge.GetDefaultColor());
+            if (_edge != selectedEdge) _edge.ChangeColor(_edge.GetDefaultColor());
+        }
+    }
+
+    foreach (Button button in buttonList)
+    {
+        if (button.IsHovered(_cursor.GetPosition()))
+        {
+            button.ChangeColor(button.GetFocusColor());
+            
+            if (selectedEdge != null && (button.GetID() == 14 || button.GetID() == 15))
+            {
+                foreach (Vertex vertex in _vertexList)
+                {
+                    if (vertex.GetID() == Convert.ToInt32(button.GetText()))
+                    {
+                        vertex.ChangeColor(Color.Red);
+                    }
+                }
+            }
+        }
+        else
+        {
+            button.ChangeColor(Color.Black);
         }
     }
 
@@ -167,14 +274,41 @@ void Main(string argument)
     using (MySpriteDrawFrame _frame = _lcd.DrawFrame())
     {
         _frame.Add(_debugSprite);
+        
+        // Отрисовываем все вершины
         foreach (Vertex _vertex in _vertexList)
         {
             _frame.Add(_vertex.DrawVertex(_width));
         }
 
+        // Отрисовываем временную вершину курсора в режиме привязки
+        if (edgeAttachToCursor)
+        {
+            // Используем специальный метод для отрисовки курсорной вершины
+            _frame.Add(cursorVertex.DrawCursorVertex());
+        }
+
+        // Отрисовываем рёбра
         foreach (Edge _edge in _edgeList)
         {
-            _frame.Add(_edge.Draw(_width));
+            if (edgeAttachToCursor && _edge == selectedEdge)
+            {
+                // В режиме привязки рисуем ребро от курсора к другой вершине
+                if (edgeModifyVertexID == 1)
+                {
+                    // Меняем первую вершину - рисуем от курсора ко второй вершине
+                    _frame.Add(_edge.DrawToCursor(_width, cursorVertex.GetPosition(), 1));
+                }
+                else if (edgeModifyVertexID == 2)
+                {
+                    // Меняем вторую вершину - рисуем от первой вершины к курсору
+                    _frame.Add(_edge.DrawToCursor(_width, cursorVertex.GetPosition(), 2));
+                }
+            }
+            else
+            {
+                _frame.Add(_edge.Draw(_width));
+            }
         }
         
         _frame.Add(_cursor.DrawCursor());
@@ -191,12 +325,65 @@ void Main(string argument)
         {
             Vector2 _currentVertexPosition = new Vector2(256f + _vertex.GetPosition().X, 256f + _vertex.GetPosition().Y);
             _tempVectorList.Add(_currentVertexPosition);
-            Vector2 _tempVectorMin = _currentVertexPosition - _vertex.GetSize();
-            Vector2 _tempVectorMax = _currentVertexPosition + _vertex.GetSize();
+        }
+        
+        foreach (Button button in buttonList)
+        {
+            if (selectedEdge != null)
+            {
+                if (button.GetID() < 2 || button.GetID() > 13) _frame.AddRange(button.Draw());
+            }
+            else if (selectedEdge == null)
+            {
+                if (button.GetID() != 14 && button.GetID() != 15) _frame.AddRange(button.Draw());
+            }
+        }
+
+        if (selectedVertex != null)
+        {
+            _frame.Add(new MySprite(SpriteType.TEXT, $"Выделенная вершина: {selectedVertex.GetID().ToString()}", new Vector2(10f, 420f), null, Color.White, "Debug", TextAlignment.LEFT, 1f));
+        }
+        else if (selectedEdge != null)
+        {
+            _frame.Add(new MySprite(SpriteType.TEXT, $"Выделенное ребро: {selectedEdge._vertex1.GetID()}-{selectedEdge._vertex2.GetID()}", new Vector2(10f, 420f), null, Color.White, "Debug", TextAlignment.LEFT, 1f));
+        }
+
+        if (selectedEdge == null)
+        {
+            _frame.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(256f, 150f), new Vector2(50f, 50f), Color.White, "", TextAlignment.CENTER, 0f));
+            _frame.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(256f, 150f), new Vector2(48f, 48f), Color.Black, "", TextAlignment.CENTER, 0f));
+
+            _frame.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(256f, 200f), new Vector2(50f, 50f), Color.White, "", TextAlignment.CENTER, 0f));
+            _frame.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(256f, 200f), new Vector2(48f, 48f), Color.Black, "", TextAlignment.CENTER, 0f));
+
+            _frame.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(256f, 250f), new Vector2(50f, 50f), Color.White, "", TextAlignment.CENTER, 0f));
+            _frame.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", new Vector2(256f, 250f), new Vector2(48f, 48f), Color.Black, "", TextAlignment.CENTER, 0f));
+        }
+
+        if (selectedVertex == null && selectedEdge == null)
+        {
+            _frame.Add(new MySprite(SpriteType.TEXT, newVertexPosition.X.ToString(), new Vector2(256f, 135f), null, Color.White, "Debug", TextAlignment.CENTER, 1f));
+            _frame.Add(new MySprite(SpriteType.TEXT, newVertexPosition.Y.ToString(), new Vector2(256f, 185f), null, Color.White, "Debug", TextAlignment.CENTER, 1f));
+            _frame.Add(new MySprite(SpriteType.TEXT, newVertexPosition.Z.ToString(), new Vector2(256f, 235f), null, Color.White, "Debug", TextAlignment.CENTER, 1f));
+        }
+        else if (selectedVertex != null && selectedEdge == null)
+        {
+            Vector3 tempVector = selectedVertex.GetPosition3D();
+            _frame.Add(new MySprite(SpriteType.TEXT, tempVector.X.ToString(), new Vector2(256f, 135f), null, Color.White, "Debug", TextAlignment.CENTER, 1f));
+            _frame.Add(new MySprite(SpriteType.TEXT, tempVector.Y.ToString(), new Vector2(256f, 185f), null, Color.White, "Debug", TextAlignment.CENTER, 1f));
+            _frame.Add(new MySprite(SpriteType.TEXT, tempVector.Z.ToString(), new Vector2(256f, 235f), null, Color.White, "Debug", TextAlignment.CENTER, 1f));
+        }
+        else if (selectedVertex == null && selectedEdge != null)
+        {
+            buttonList[14].SetText(selectedEdge._vertex1.GetID().ToString());
+            buttonList[15].SetText(selectedEdge._vertex2.GetID().ToString());
+            _frame.Add(new MySprite(SpriteType.TEXT, $"ID вершины A: ", new Vector2(20f, 100f), null, Color.White, "Debug", TextAlignment.LEFT, 1f));
+            _frame.Add(new MySprite(SpriteType.TEXT, $"ID вершины B: ", new Vector2(20f, 140f), null, Color.White, "Debug", TextAlignment.LEFT, 1f));
         }
 
         _frame.Add(new MySprite(SpriteType.TEXT, $"Координаты курсоры: {Math.Round(_cursor.GetPosition().X)}; {Math.Round(_cursor.GetPosition().Y)}", new Vector2(10f, 450f), null, Color.White, "Debug", TextAlignment.LEFT, 1f));
         _frame.Add(new MySprite(SpriteType.TEXT, "Курсор наведён на: " + _cursorVertex, new Vector2(10f, 480f), null, Color.White, "Debug", TextAlignment.LEFT, 1f));
+                
         _frame.Add(_cursorDebug.DrawCursor());
     }
 
@@ -276,6 +463,299 @@ List<Edge> LoadEdge()
     return _tempEdgeList;
 }
 
+void OnClick()
+{
+    if (edgeAttachToCursor)
+    {
+        // В режиме привязки: ищем вершину под курсором для прикрепления
+        Vertex targetVertex = null;
+        
+        foreach (Vertex vertex in _vertexList)
+        {
+            if (CheckVertexHover(vertex))
+            {
+                targetVertex = vertex;
+                break;
+            }
+        }
+        
+        if (targetVertex != null && selectedEdge != null)
+        {
+            // Прикрепляем ребро к найденной вершине
+            if (edgeModifyVertexID == 1)
+            {
+                selectedEdge._vertex1 = targetVertex;
+            }
+            else if (edgeModifyVertexID == 2)
+            {
+                selectedEdge._vertex2 = targetVertex;
+            }
+            
+            Echo($"Ребро прикреплено к вершине ID: {targetVertex.GetID()}");
+        }
+        else
+        {
+            Echo("Привязка отменена (не найдена вершина под курсором)");
+        }
+        
+        // Выходим из режима привязки
+        edgeAttachToCursor = false;
+        edgeModifyVertexID = -1;
+        return;
+    }
+
+    bool isClickVertex = false;
+    bool isClickEdge = false;
+
+    foreach (Vertex _vertex in _vertexList)
+    {
+        if(CheckVertexHover(_vertex))
+        {
+            isClickVertex = true;
+            selectedVertex = _vertex;
+            selectedEdge = null;
+        }
+    }
+
+    if (!isClickVertex)
+    {
+        foreach (Edge edge in _edgeList)
+        {
+            if (edge.IsEdgeUnderCursor(_cursor.GetPosition()))
+            {
+                isClickEdge = true;
+                selectedVertex = null;
+                selectedEdge = edge;
+            }
+        }
+    }
+
+    if (isClickVertex)
+    {
+        selectedVertex.ChangeColor(Color.Orange);
+        return;
+    }
+    else if (isClickEdge)
+    {
+        selectedEdge.ChangeColor(Color.Orange);
+        return;
+    }
+
+    foreach (Button btn in buttonList)
+    {
+        if (btn.IsHovered(_cursor.GetPosition()))
+        {
+            switch (btn.GetID())
+            {
+                case 0:
+                    _vertexList.Add(new Vertex(newVertexPosition, 10f, Color.Cyan, CheckVertexID()));
+                    newVertexPosition = new Vector3(0f, 0f, 0f);
+                    break;
+
+                case 1: break;
+
+                case 2:
+                    if (selectedEdge == null)
+                    {
+                        if (selectedVertex == null) newVertexPosition.X--;
+                        else
+                        {
+                            selectedVertex.X--;
+                            selectedVertex.Update();
+                        }
+                    }
+                    break;
+
+                case 3:
+                    if (selectedEdge == null)
+                    {
+                        if (selectedVertex == null) newVertexPosition.X -= 5;
+                        else
+                        {
+                            selectedVertex.X -= 5;
+                            selectedVertex.Update();
+                        }
+                    }
+                    break;
+
+                case 4:
+                    if (selectedEdge == null)
+                    {
+                        if (selectedVertex == null) newVertexPosition.X++;
+                        else
+                        {
+                            selectedVertex.X++;
+                            selectedVertex.Update();
+                        }
+                    }
+                    break;
+
+                case 5:
+                    if (selectedEdge == null)
+                    {
+                        if (selectedVertex == null) newVertexPosition.X += 5;
+                        else
+                        {
+                            selectedVertex.X += 5;
+                            selectedVertex.Update();
+                        }
+                    }
+                    break;
+                
+                case 6:
+                    if (selectedEdge == null)
+                    {
+                        if (selectedVertex == null) newVertexPosition.Y--;
+                        else
+                        {
+                            selectedVertex.Y--;
+                            selectedVertex.Update();
+                        }
+                    }
+                    break;
+
+                case 7:
+                    if (selectedEdge == null)
+                    {
+                        if (selectedVertex == null) newVertexPosition.Y -= 5;
+                        else
+                        {
+                            selectedVertex.Y -= 5;
+                            selectedVertex.Update();
+                        }
+                    }
+                    break;
+
+                case 8:
+                    if (selectedEdge == null)
+                    {
+                        if (selectedVertex == null) newVertexPosition.Y++;
+                        else
+                        {
+                            selectedVertex.Y++;
+                            selectedVertex.Update();
+                        }
+                    }
+                    break;
+
+                case 9:
+                    if (selectedEdge == null)
+                    {
+                        if (selectedVertex == null) newVertexPosition.Y += 5;
+                        else
+                        {
+                            selectedVertex.Y += 5;
+                            selectedVertex.Update();
+                        }
+                    }
+                    break;
+
+                case 10:
+                    if (selectedEdge == null)
+                    {
+                        if (selectedVertex == null) newVertexPosition.Z--;
+                        else
+                        {
+                            selectedVertex.Z--;
+                            selectedVertex.Update();
+                        }
+                    }
+                    break;
+
+                case 11:
+                    if (selectedEdge == null)
+                    {
+                    if (selectedVertex == null) newVertexPosition.Z -= 5;
+                        else
+                        {
+                            selectedVertex.Z -= 5;
+                            selectedVertex.Update();
+                        } 
+                    }
+                    break;
+
+                case 12:
+                    if (selectedEdge == null)
+                    {
+                    if (selectedVertex == null) newVertexPosition.Z++;
+                        else
+                        {
+                            selectedVertex.Z++;
+                            selectedVertex.Update();
+                        } 
+                    }
+                    break;
+
+                case 13:
+                    if (selectedEdge == null)
+                    {
+                        if (selectedVertex == null) newVertexPosition.Z += 5;
+                        else
+                        {
+                            selectedVertex.Z += 5;
+                            selectedVertex.Update();
+                        }
+                    }
+                    break;
+                
+                case 14:
+                    if (selectedEdge != null)
+                    {
+                        // Включаем режим привязки для первой вершины
+                        edgeAttachToCursor = true;
+                        edgeModifyVertexID = 1;
+                        Echo("Режим привязки: двигайте курсор к новой вершине и нажмите");
+                    }
+                    break;
+                    
+                case 15:
+                    if (selectedEdge != null)
+                    {
+                        // Включаем режим привязки для второй вершины
+                        edgeAttachToCursor = true;
+                        edgeModifyVertexID = 2;
+                        Echo("Режим привязки: двигайте курсор к новой вершине и нажмите");
+                    }
+                    break;
+            }
+            return;
+        }
+    }
+
+    selectedEdge = null;
+    selectedVertex = null;
+}
+
+bool CheckVertexHover(Vertex vertex)
+{
+    Vector2 _currentVertexPosition = new Vector2(260f + vertex.GetPosition().X * _width, 260f + vertex.GetPosition().Y * _width);
+    Vector2 _tempVectorMin = _currentVertexPosition - vertex.GetSize() / 2;
+    Vector2 _tempVectorMax = _currentVertexPosition + vertex.GetSize() / 2;
+
+    if (_cursor.GetPosition().X >= _tempVectorMin.X && _cursor.GetPosition().X <= _tempVectorMax.X &&
+        _cursor.GetPosition().Y >= _tempVectorMin.Y && _cursor.GetPosition().Y <= _tempVectorMax.Y)
+    {
+        return true;
+    }
+    return false;
+}
+
+//  0 1 2 3 4 5 6 7 9
+// -1 0 1 2 3 4 5 6 7 8 9 10
+
+int CheckVertexID()
+{
+    int id = -1;
+    foreach (Vertex vertex in _vertexList)
+    {
+        if (vertex.GetID() == id + 1) id++;
+        else return id;
+    }
+    return ++id;
+}
+
+// v------------------------------------------------------------------------- Классы ---------------------------------------------------------------------------v
+
 class Cursor
 {
     Vector2 _cursorPosition;
@@ -313,6 +793,9 @@ class Vertex
     Color _vertexDefaultColor;
     Color _vertexFocusColor;
     int _vertexID;
+    public float X;
+    public float Y;
+    public float Z;
 
     public Vertex(Vector3 Vertex3DPosition, float VertexSize, Color VertexColor, int VertexID)
     {
@@ -323,6 +806,20 @@ class Vertex
         _vertexCurrentColor = VertexColor;
         _vertexFocusColor = Color.Red;
         _vertexID = VertexID;
+        this.X = Vertex3DPosition.X;
+        this.Y = Vertex3DPosition.Y;
+        this.Z = Vertex3DPosition.Z;
+    }
+
+    public Vertex()
+    {
+        _vertex3DPosition = new Vector3(0f, 0f, 0f);
+        _vertexPosition = new Vector2(0f, 0f);
+        _vertexSize = new Vector2(0f, 0f);
+        _vertexDefaultColor = Color.Yellow;
+        _vertexCurrentColor = Color.Yellow;
+        _vertexFocusColor = Color.Yellow;
+        _vertexID = -999;
     }
 
     public void ChangeColor(Color Color)
@@ -402,6 +899,31 @@ class Vertex
         string _tempColor = $"{_vertexDefaultColor.R},{_vertexDefaultColor.G},{_vertexDefaultColor.B}";
         return $"{_temp3DPosition}|{_tempSize}|{_tempColor}|{_vertexID}";
     }
+
+    public void Update()
+    {
+        _vertex3DPosition = new Vector3(X, Y, Z);
+    }
+
+    public void UpdatePosition(Vector2 Position)
+    {
+        _vertexPosition = Position;
+        
+        float screenX = (Position.X - 256f) / _width;
+        float screenY = (Position.Y - 256f) / _width;
+
+        X = screenX * 10f;
+        Y = screenY * 10f;
+        Z = 0;
+        Update();
+    }
+
+    public MySprite DrawCursorVertex()
+    {
+        return new MySprite(SpriteType.TEXTURE, "Cirle", _vertexPosition, _vertexSize, _vertexCurrentColor, "", TextAlignment.CENTER, 0f);
+    }
+
+
 }
 
 class Edge
@@ -434,6 +956,38 @@ class Edge
             CenterVector,
             new Vector2((_vertex1Position - _vertex2Position).Length(), _edgeWidth),
             _edgeCurrentColor,
+            "",
+            TextAlignment.CENTER,
+            (float)Math.Atan2(_vertex2Position.Y - _vertex1Position.Y, _vertex2Position.X - _vertex1Position.X));
+    }
+
+    // Новый метод для рисования ребра с привязкой к курсору
+    public MySprite DrawToCursor(float Width, Vector2 cursorPosition, int vertexToReplace)
+    {
+        Vector2 _vertex1Position, _vertex2Position;
+        
+        if (vertexToReplace == 1)
+        {
+            // Заменяем первую вершину на позицию курсора
+            _vertex1Position = cursorPosition;
+            // Вторая вершина: обычное преобразование
+            _vertex2Position = new Vector2(256f + _vertex2.GetPosition().X * Width, 256f + _vertex2.GetPosition().Y * Width);
+        }
+        else // vertexToReplace == 2
+        {
+            // Первая вершина: обычное преобразование
+            _vertex1Position = new Vector2(256f + _vertex1.GetPosition().X * Width, 256f + _vertex1.GetPosition().Y * Width);
+            // Заменяем вторую вершину на позицию курсора
+            _vertex2Position = cursorPosition;
+        }
+        
+        Vector2 CenterVector = (_vertex1Position + _vertex2Position) / 2;
+        return new MySprite(
+            SpriteType.TEXTURE,
+            "SquareSimple",
+            CenterVector,
+            new Vector2((_vertex1Position - _vertex2Position).Length(), _edgeWidth),
+            Color.Orange,
             "",
             TextAlignment.CENTER,
             (float)Math.Atan2(_vertex2Position.Y - _vertex1Position.Y, _vertex2Position.X - _vertex1Position.X));
@@ -475,34 +1029,26 @@ class Edge
 
     public bool IsEdgeUnderCursor(Vector2 _cursorPosition)
     {
-        const float width = 10f; // Используем тот же масштаб, что и при отрисовке
+        const float width = 10f;
         Vector2 v1 = GetVertex1ScreenPos(width);
         Vector2 v2 = GetVertex2ScreenPos(width);
         
-        // Вычисляем вектор ребра
         Vector2 edge = v2 - v1;
         float edgeLength = edge.Length();
         
-        // Нормализуем вектор ребра
         Vector2 edgeDir = edge / edgeLength;
         
-        // Вектор от первой вершины к курсору
         Vector2 toCursor = _cursorPosition - v1;
         
-        // Проекция вектора toCursor на ребро
         float projection = Vector2.Dot(toCursor, edgeDir);
         
-        // Ограничиваем проекцию в пределах ребра
         projection = Math.Max(0, Math.Min(edgeLength, projection));
         
-        // Находим ближайшую точку на ребре к курсору
         Vector2 closestPoint = v1 + edgeDir * projection;
         
-        // Расстояние от курсора до ближайшей точки на ребре
         float distance = Vector2.Distance(_cursorPosition, closestPoint);
         
-        // Пороговое расстояние для наведения (можно регулировать)
-        float threshold = Math.Max(_edgeWidth, 10f); // Используем ширину ребра или минимальный порог
+        float threshold = Math.Max(_edgeWidth, 10f);
         
         return distance <= threshold;
     }
@@ -513,31 +1059,99 @@ class Edge
         Vector2 v1 = GetVertex1ScreenPos(width);
         Vector2 v2 = GetVertex2ScreenPos(width);
         
-        // Вычисляем вектор ребра
         Vector2 edgeVec = v2 - v1;
         float edgeLength = edgeVec.Length();
         
-        // Нормализуем вектор ребра
         Vector2 edgeDir = edgeVec / edgeLength;
         
-        // Вектор от первой вершины к курсору
         Vector2 toCursor = cursorPos - v1;
         
-        // Проекция вектора toCursor на ребро
         float projection = Vector2.Dot(toCursor, edgeDir);
         
-        // Ограничиваем проекцию в пределах ребра
         projection = Math.Max(0, Math.Min(edgeLength, projection));
         
-        // Находим ближайшую точку на ребре к курсору
         Vector2 closestPoint = v1 + edgeDir * projection;
         
-        // Расстояние от курсора до ближайшей точки на ребре
         return Vector2.Distance(cursorPos, closestPoint);
     }
 
     public float GetAverageZ()
     {
         return (_vertex1.GetPosition3D().Z + _vertex2.GetPosition3D().Z) / 2f;
+    }
+}
+
+class Button
+{
+    int id;
+    string text;
+    Color currentColor, defaultColor, focusColor;
+    Vector2 position;
+
+    public Button(int ID, string Text, Color Color, Vector2 Position)
+    {
+        this.id = ID;
+        this.text = Text;
+        this.defaultColor = Color;
+        this.currentColor = Color.Black;
+        this.focusColor = Color.Red;
+        this.position = Position;
+    }
+
+    public Button(int ID, string Text, Color DefaultColor, Color FocusColor, Vector2 Position)
+    {
+        this.id = ID;
+        this.text = Text;
+        this.defaultColor = DefaultColor;
+        this.currentColor = Color.Black;
+        this.focusColor = FocusColor;
+        this.position = Position;
+    }
+
+    public List<MySprite> Draw()
+    {
+        List<MySprite> spriteList = new List<MySprite>();
+        spriteList.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", position, new Vector2(40f + text.Length * 12f, 50f), defaultColor, "", TextAlignment.CENTER, 0f));
+        spriteList.Add(new MySprite(SpriteType.TEXTURE, "SquareSimple", position, new Vector2(36f + text.Length * 12f, 48f), currentColor, "", TextAlignment.CENTER, 0f));
+        spriteList.Add(new MySprite(SpriteType.TEXT, text, new Vector2(position.X, position.Y - 15f), null, Color.White, "Debug", TextAlignment.CENTER, 1f));
+        return spriteList;
+    }
+
+    public void ChangeColor(Color ChangedColor)
+    {
+        currentColor = ChangedColor;
+    }
+
+    public Color GetDefaultColor()
+    {
+        return defaultColor;
+    }
+
+    public Color GetFocusColor()
+    {
+        return focusColor;
+    }
+
+    public int GetID()
+    {
+        return id;
+    }
+
+    public bool IsHovered(Vector2 Position)
+    {
+        Vector2 size = new Vector2(40f + text.Length * 12f, 50f);
+        if (Position.X >= position.X - size.X / 2 && Position.X <= position.X + size.X / 2 &&
+            Position.Y >= (position.Y - size.Y / 2) - 512f && Position.Y <= (position.Y + size.Y / 2) - 512f) return true;
+        else return false;
+    }
+
+    public void SetText(String Text)
+    {
+        this.text = Text;
+    }
+
+    public string GetText()
+    {
+        return text;
     }
 }
